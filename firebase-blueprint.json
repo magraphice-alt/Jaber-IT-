@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile, roles, balances and total stats",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "mobile": { "type": "string" },
+        "role": { "type": "string" },
+        "balance": { "type": "number" },
+        "commissionRate": { "type": "number" },
+        "avatarUrl": { "type": "string" },
+        "totalSend": { "type": "number" },
+        "totalCommission": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "balance"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction requests (send, deposit, charge)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "type": { "type": "string" },
+        "recipientMobile": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "comment": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "attachmentName": { "type": "string" },
+        "status": { "type": "string" },
+        "commissionEarned": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "approvedAt": { "type": "string" },
+        "adminPin": { "type": "string" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "amount", "method", "status"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "System or user notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "read": { "type": "boolean" },
+        "type": { "type": "string" },
+        "txnId": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "message"]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Masud Telecom",
+  "description": "Managing internal financial transactions and tracking employee commissions efficiently.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
