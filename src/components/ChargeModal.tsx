@@ -9,7 +9,7 @@ interface ChargeModalProps {
 }
 
 export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
-  const { currentUser, transactions, chargeUserBalance } = useApp();
+  const { currentUser, transactions, chargeUserBalance, users } = useApp();
   const [chargeAmount, setChargeAmount] = useState('');
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
@@ -17,14 +17,21 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
 
   const isAdmin = currentUser?.role === 'admin';
 
-  // Calculate commission: (user total send / 1000) * 7.5
-  const userTotalSend = user.totalSend || 0;
-  const calculatedCommission = (userTotalSend / 1000) * 7.5;
+  // Get live user from state to reflect instant updates
+  const liveUser = users.find(u => u.id === user.id) || user;
 
   // Filter charges for this user
   const userCharges = transactions.filter(
-    t => t.userId === user.id && (t.type === 'charge' || t.comment?.toLowerCase().includes('charge'))
+    t => t.userId === liveUser.id && (t.type === 'charge' || t.comment?.toLowerCase().includes('charge'))
   );
+  const userChargesTotal = userCharges.reduce((sum, t) => sum + t.amount, 0);
+
+  // Calculate commission: (user total send / 1000) * 7.5 minus charges
+  const userTotalSend = liveUser.totalSend || 0;
+  const grossCommission = (userTotalSend / 1000) * 7.5;
+  const calculatedCommission = liveUser.totalCommission !== undefined
+    ? liveUser.totalCommission
+    : Math.max(0, grossCommission - userChargesTotal);
 
   const handleApplyCharge = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +44,7 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
     }
 
     setIsSubmitting(true);
-    const result = chargeUserBalance(user.id, amt, reason.trim() || 'Admin Service Charge');
+    const result = chargeUserBalance(liveUser.id, amt, reason.trim() || 'Admin Service Charge');
     setIsSubmitting(false);
 
     if (result.success) {
@@ -61,7 +68,7 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
             </div>
             <div>
               <h2 className="text-base font-bold tracking-tight">Commission & Charge Box</h2>
-              <p className="text-xs text-slate-400 font-medium">User: {user.name} ({user.mobile})</p>
+              <p className="text-xs text-slate-400 font-medium">User: {liveUser.name} ({liveUser.mobile})</p>
             </div>
           </div>
           <button
@@ -106,7 +113,7 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-500 block">User Available Balance</span>
                 <strong className="text-sm font-black text-blue-950 font-mono">
-                  ৳{user.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                  ৳{liveUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
                 </strong>
               </div>
               <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">

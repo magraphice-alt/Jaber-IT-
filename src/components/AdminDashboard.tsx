@@ -29,7 +29,10 @@ import {
   Copy,
   Check,
   Lock,
-  Percent
+  Percent,
+  Trash2,
+  Plus,
+  AlertTriangle
 } from 'lucide-react';
 import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
@@ -54,8 +57,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     rejectTransaction,
     updateCommissionRate,
     createUserAccount,
+    deleteUserAccount,
     logout
   } = useApp();
+
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deleteErrorMsg, setDeleteErrorMsg] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [historyTab, setHistoryTab] = useState<'pending' | 'approved_send' | 'approved_deposit' | 'charges'>('pending');
@@ -182,6 +190,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       setNewUserBalance('');
     } else {
       setCreateErrorMsg(res.message || 'Failed to create user account.');
+    }
+  };
+
+  const handleDeleteUserConfirmed = () => {
+    if (!userToDelete) return;
+    setDeleteErrorMsg(null);
+    const res = deleteUserAccount(userToDelete.id);
+    if (res.success) {
+      if (selectedUserId === userToDelete.id) {
+        setSelectedUserId(null);
+      }
+      setUserToDelete(null);
+    } else {
+      setDeleteErrorMsg(res.message || 'Failed to delete user account.');
     }
   };
 
@@ -622,9 +644,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                     <Users className="w-5 h-5 text-blue-900" />
                     Employee User Directory
                   </h2>
-                  <span className="text-xs font-semibold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
-                    {users.length} Total
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateSuccessMsg(null);
+                        setCreateErrorMsg(null);
+                        setShowCreateUserModal(true);
+                      }}
+                      className="bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-xs cursor-pointer transition-all active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-blue-200" />
+                      <span>+ New A/C</span>
+                    </button>
+                    <span className="text-xs font-semibold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                      {users.length} Total
+                    </span>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -665,42 +701,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                               <span className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-900 transition-colors">
                                 {u.name}
                               </span>
-                              <span
-                                className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                                  u.role === 'admin'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-slate-100 text-slate-700'
-                                }`}
-                              >
-                                {u.role}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                                    u.role === 'admin'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {u.role}
+                                </span>
+                                {u.id !== currentUser?.id && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteErrorMsg(null);
+                                      setUserToDelete(u);
+                                    }}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Delete User Account"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <span className="text-xs text-slate-500 block truncate">{u.email}</span>
                           </div>
                           <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-900 transition-colors" />
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center font-mono text-xs">
-                          <div className="bg-slate-50 p-1.5 rounded">
-                            <span className="text-[10px] text-slate-600 block">Balance</span>
-                            <strong className="text-slate-900">৳{u.balance.toLocaleString('en-BD')}</strong>
+                        {u.role !== 'admin' && (
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center font-mono text-xs">
+                            <div className="bg-slate-50 p-1.5 rounded">
+                              <span className="text-[10px] text-slate-600 block">Balance</span>
+                              <strong className="text-slate-900">৳{u.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</strong>
+                            </div>
+                            <div className="bg-slate-50 p-1.5 rounded">
+                              <span className="text-[10px] text-slate-600 block">Total Send</span>
+                              <strong className="text-blue-900">৳{(u.totalSend || 0).toLocaleString('en-BD')}</strong>
+                            </div>
+                            <div
+                              onClick={e => {
+                                e.stopPropagation();
+                                setChargeModalUser(u);
+                              }}
+                              className="bg-emerald-50/90 p-1.5 rounded border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors"
+                              title="Tap to open Charge Box"
+                            >
+                              <span className="text-[10px] text-emerald-800 font-bold block">Commission</span>
+                              <strong className="text-emerald-700">
+                                ৳{(u.totalCommission !== undefined 
+                                  ? u.totalCommission 
+                                  : Math.max(0, (((u.totalSend || 0) / 1000) * 7.5) - transactions.filter(t => t.userId === u.id && t.type === 'charge').reduce((acc, t) => acc + t.amount, 0))
+                                ).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </strong>
+                            </div>
                           </div>
-                          <div className="bg-slate-50 p-1.5 rounded">
-                            <span className="text-[10px] text-slate-600 block">Total Send</span>
-                            <strong className="text-blue-900">৳{u.totalSend.toLocaleString('en-BD')}</strong>
-                          </div>
-                          <div
-                            onClick={e => {
-                              e.stopPropagation();
-                              setChargeModalUser(u);
-                            }}
-                            className="bg-emerald-50/90 p-1.5 rounded border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors"
-                            title="Tap to open Charge Box"
-                          >
-                            <span className="text-[10px] text-emerald-800 font-bold block">Commission</span>
-                            <strong className="text-emerald-700">৳{(((u.totalSend || 0) / 1000) * 7.5).toFixed(2)}</strong>
-                          </div>
-                        </div>
+                        )}
 
                         <div className="text-[10px] font-bold text-blue-900 text-right flex items-center justify-end gap-1 pt-1 group-hover:underline">
                           <span>Tap to view user activities</span>
@@ -737,7 +796,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                   .filter(t => t.type === 'charge')
                   .reduce((acc, t) => acc + t.amount, 0);
 
-                const userGrossComm = (userApprovedSend / 1000) * 7.5;
+                const userTotalSendAmount = selectedUser.totalSend !== undefined ? selectedUser.totalSend : userApprovedSend;
+                const userGrossComm = (userTotalSendAmount / 1000) * 7.5;
                 const userTotalComm = selectedUser.totalCommission !== undefined ? selectedUser.totalCommission : Math.max(0, userGrossComm - userChargesTotal);
 
                 return (
@@ -751,9 +811,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back to All Users</span>
                       </button>
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        User Activity Log
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {selectedUser.id !== currentUser?.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteErrorMsg(null);
+                              setUserToDelete(selectedUser);
+                            }}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete A/C</span>
+                          </button>
+                        )}
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">
+                          User Activity Log
+                        </span>
+                      </div>
                     </div>
 
                     {/* Selected User Hero Summary Card */}
@@ -777,31 +852,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                       </div>
 
                       {/* User Stats Grid */}
-                      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 font-mono text-xs">
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-500 uppercase font-semibold block">Current Balance</span>
-                          <strong className="text-sm font-extrabold text-slate-900">৳{selectedUser.balance.toLocaleString('en-BD')}</strong>
-                        </div>
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-500 uppercase font-semibold block">Comm Rate</span>
-                          <strong className="text-sm font-extrabold text-blue-900">{selectedUser.commissionRate}%</strong>
-                        </div>
-                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                          <span className="text-[10px] text-slate-500 uppercase font-semibold block">Approved Send</span>
-                          <strong className="text-sm font-extrabold text-blue-900">৳{userApprovedSend.toLocaleString('en-BD')}</strong>
-                        </div>
-                        <div
-                          onClick={() => setChargeModalUser(selectedUser)}
-                          className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all group"
-                          title="Tap to open Charge Box"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-emerald-800 uppercase font-bold block">Commission</span>
-                            <span className="text-[9px] font-bold uppercase bg-emerald-200/80 text-emerald-900 px-1 py-0.5 rounded">Charge Box</span>
+                      {selectedUser.role !== 'admin' && (
+                        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 font-mono text-xs">
+                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Current Balance</span>
+                            <strong className="text-sm font-extrabold text-slate-900">৳{selectedUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</strong>
                           </div>
-                          <strong className="text-sm font-black text-emerald-700">৳{userTotalComm.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Comm Rate</span>
+                            <strong className="text-sm font-extrabold text-blue-900">{selectedUser.commissionRate}%</strong>
+                          </div>
+                          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Approved Send</span>
+                            <strong className="text-sm font-extrabold text-blue-900">৳{userTotalSendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</strong>
+                          </div>
+                          <div
+                            onClick={() => setChargeModalUser(selectedUser)}
+                            className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all group"
+                            title="Tap to open Charge Box"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-emerald-800 uppercase font-bold block">Commission</span>
+                              <span className="text-[9px] font-bold uppercase bg-emerald-200/80 text-emerald-900 px-1 py-0.5 rounded">Charge Box</span>
+                            </div>
+                            <strong className="text-sm font-black text-emerald-700">৳{userTotalComm.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Filter Bar */}
@@ -1487,9 +1564,184 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       {/* Charge Box Modal */}
       {chargeModalUser && (
         <ChargeModal
-          user={chargeModalUser}
+          user={users.find(u => u.id === chargeModalUser.id) || chargeModalUser}
           onClose={() => setChargeModalUser(null)}
         />
+      )}
+
+      {/* New Account Creation Modal */}
+      {showCreateUserModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2 text-blue-900 font-extrabold text-base">
+                <UserPlus className="w-5 h-5 text-blue-900" />
+                <span>Create New User A/C</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateUserModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-lg flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{createSuccessMsg}</span>
+              </div>
+            )}
+
+            {createErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{createErrorMsg}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                handleCreateUser(e);
+              }}
+              className="space-y-3 text-left"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                  placeholder="e.g. Tanvir Ahmed"
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={e => setNewUserEmail(e.target.value)}
+                  placeholder="e.g. tanvir@masudtelecom.com"
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Mobile Number</label>
+                <input
+                  type="text"
+                  value={newUserMobile}
+                  onChange={e => setNewUserMobile(e.target.value)}
+                  placeholder="e.g. +880 1712 345678"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Initial Balance (৳)</label>
+                <input
+                  type="number"
+                  value={newUserBalance}
+                  onChange={e => setNewUserBalance(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Login Password *</label>
+                <input
+                  type="text"
+                  value={newUserPassword}
+                  onChange={e => setNewUserPassword(e.target.value)}
+                  placeholder="e.g. User@123"
+                  required
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white font-mono"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl text-xs transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <UserPlus className="w-4 h-4 text-blue-200" /> Create Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100">
+              <div className="flex items-center gap-2 text-rose-600 font-extrabold text-base">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+                <span>Delete User Account</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {deleteErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-lg flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{deleteErrorMsg}</span>
+              </div>
+            )}
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1 text-xs">
+              <div className="font-extrabold text-slate-900">{userToDelete.name}</div>
+              <div className="text-slate-500 font-medium">{userToDelete.email}</div>
+              <div className="text-slate-500 font-mono text-[11px]">{userToDelete.mobile}</div>
+              <div className="pt-2 flex justify-between font-mono text-[11px] border-t border-slate-200 mt-2">
+                <span className="text-slate-500 font-bold">Available Balance:</span>
+                <span className="font-bold text-slate-900">৳{userToDelete.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-rose-800 font-semibold bg-rose-50 p-2.5 rounded-xl border border-rose-200/80">
+              ⚠️ Warning: Deleting this account will permanently remove this user profile.
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleDeleteUserConfirmed}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Yes, Delete User
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

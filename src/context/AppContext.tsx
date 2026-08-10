@@ -18,6 +18,7 @@ interface AppContextType {
   rejectTransaction: (txnId: string, reason?: string) => void;
   updateCommissionRate: (rate: number) => void;
   createUserAccount: (userData: Partial<User>, passwordStr: string) => { success: boolean; message?: string };
+  deleteUserAccount: (userId: string) => { success: boolean; message?: string };
   chargeUserBalance: (userId: string, chargeAmount: number, reason?: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
@@ -470,6 +471,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  const deleteUserAccount = (userId: string) => {
+    if (currentUser?.id === userId) {
+      return { success: false, message: 'You cannot delete your own active admin account.' };
+    }
+    const target = users.find(u => u.id === userId);
+    if (!target) {
+      return { success: false, message: 'User not found.' };
+    }
+
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    deleteDoc(doc(db, 'users', userId)).catch(() => {});
+
+    return { success: true, message: `Account for ${target.name} deleted successfully.` };
+  };
+
   const markNotificationRead = (id: string) => {
     setNotifications(prev =>
       prev.map(n => {
@@ -506,6 +522,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rejectTransaction,
         updateCommissionRate,
         createUserAccount,
+        deleteUserAccount,
         chargeUserBalance,
         markNotificationRead,
         clearNotifications
