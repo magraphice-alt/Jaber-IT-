@@ -17,7 +17,7 @@ export interface User {
 
 export type TransactionType = 'send' | 'deposit' | 'charge';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected';
-export type TransferMethod = 'bKash' | 'Nagad' | 'Rocket' | 'Bank' | 'Cash';
+export type TransferMethod = 'bKash' | 'Nagad' | 'Rocket' | 'Bank' | 'Cash' | 'Admin Credit' | 'Admin Debit' | 'Admin Manual';
 
 export interface Transaction {
   id: string;

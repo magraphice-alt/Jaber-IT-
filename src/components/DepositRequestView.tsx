@@ -1,12 +1,49 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Bell, Upload, CheckCircle, FileText, X } from 'lucide-react';
+import { ArrowLeft, Bell, Upload, CheckCircle, FileText, X, Loader2 } from 'lucide-react';
 import { TransferMethod } from '../types';
 
 interface DepositRequestViewProps {
   onBack: () => void;
   onOpenNotifications: () => void;
 }
+
+const compressImage = (dataUrl: string, maxWidth = 500, quality = 0.5): Promise<string> => {
+  return new Promise((resolve) => {
+    if (!dataUrl || !dataUrl.startsWith('data:image')) {
+      if (dataUrl && dataUrl.length > 250000) {
+        resolve(dataUrl.substring(0, 250000));
+      } else {
+        resolve(dataUrl || '');
+      }
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, width);
+      canvas.height = Math.max(1, height);
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
 
 export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, onOpenNotifications }) => {
   const { createDepositRequest, notifications, currentUser } = useApp();
@@ -16,6 +53,7 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
   const [comment, setComment] = useState('');
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -27,14 +65,29 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMsg('File size must be under 5MB.');
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMsg('File size must be under 10MB.');
         return;
       }
+      setErrorMsg(null);
       setFileName(file.name);
+      setIsCompressing(true);
+
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFilePreview(reader.result as string);
+      reader.onloadend = async () => {
+        const rawResult = reader.result as string;
+        try {
+          const compressed = await compressImage(rawResult);
+          setFilePreview(compressed);
+        } catch {
+          setFilePreview(rawResult.length > 250000 ? rawResult.substring(0, 250000) : rawResult);
+        } finally {
+          setIsCompressing(false);
+        }
+      };
+      reader.onerror = () => {
+        setIsCompressing(false);
+        setErrorMsg('Failed to read file.');
       };
       reader.readAsDataURL(file);
     }
@@ -57,25 +110,30 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
 
     setIsSubmitting(true);
 
-    const ok = await createDepositRequest(
-      numAmt,
-      method as TransferMethod,
-      comment.trim(),
-      filePreview || undefined,
-      fileName || undefined
-    );
+    try {
+      const ok = await createDepositRequest(
+        numAmt,
+        method as TransferMethod,
+        comment.trim(),
+        filePreview || undefined,
+        fileName || undefined
+      );
 
-    setIsSubmitting(false);
-
-    if (ok) {
-      setSuccessMsg(`Deposit request of ৳${numAmt.toLocaleString('en-BD')} submitted successfully. Admin will review your proof.`);
-      setAmount('');
-      setMethod('');
-      setComment('');
-      setFilePreview(null);
-      setFileName(null);
-    } else {
-      setErrorMsg('Failed to process deposit request. Please try again.');
+      if (ok) {
+        setSuccessMsg(`Deposit request of ৳${numAmt.toLocaleString('en-BD')} submitted successfully. Admin will review your deposit proof.`);
+        setAmount('');
+        setMethod('');
+        setComment('');
+        setFilePreview(null);
+        setFileName(null);
+      } else {
+        setErrorMsg('Failed to process deposit request. Please try again.');
+      }
+    } catch (err) {
+      console.error('Deposit submit error:', err);
+      setErrorMsg('An unexpected error occurred. Please check your network and try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -173,7 +231,12 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Upload Documents (Receipt/Proof)
               </label>
-              {filePreview ? (
+              {isCompressing ? (
+                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-center gap-2 text-xs font-semibold text-slate-600">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-900" />
+                  <span>Processing attachment...</span>
+                </div>
+              ) : filePreview ? (
                 <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center gap-3">
                   {filePreview.startsWith('data:image') ? (
                     <img src={filePreview} alt="Receipt Preview" className="w-14 h-14 rounded-lg object-cover border" />
@@ -184,7 +247,7 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-800 truncate">{fileName}</p>
-                    <p className="text-[10px] text-slate-500">Document attached</p>
+                    <p className="text-[10px] text-emerald-600 font-semibold">Ready to upload</p>
                   </div>
                   <button
                     type="button"
@@ -197,8 +260,8 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
               ) : (
                 <label className="border-2 border-dashed border-slate-300 hover:border-blue-800 rounded-2xl p-6 bg-slate-50/50 flex flex-col items-center justify-center cursor-pointer transition-all">
                   <Upload className="w-8 h-8 text-blue-900 mb-2" />
-                  <span className="text-sm font-bold text-blue-950">Attach File</span>
-                  <span className="text-xs text-slate-600 mt-1">JPG, PNG or PDF (Max 5MB)</span>
+                  <span className="text-sm font-bold text-blue-950">Attach Receipt / Document</span>
+                  <span className="text-xs text-slate-600 mt-1">JPG, PNG or PDF</span>
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -212,13 +275,13 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
             {/* Comment (Optional) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Comment (Optional)
+                Comment / Reference (Optional)
               </label>
               <textarea
                 rows={3}
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                placeholder="Add any specific instructions or references..."
+                placeholder="Add Transaction ID or deposit details..."
                 className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl p-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all resize-none"
               />
             </div>
@@ -226,7 +289,7 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
             {/* Submit Request Button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isCompressing}
               className="w-full mt-3 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-60 cursor-pointer text-sm"
             >
               {isSubmitting ? (

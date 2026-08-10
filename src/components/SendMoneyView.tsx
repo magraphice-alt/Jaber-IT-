@@ -44,23 +44,28 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
 
     setIsSubmitting(true);
 
-    const ok = await createSendRequest(
-      mobileNumber.trim(),
-      numAmt,
-      method as TransferMethod,
-      comment.trim()
-    );
+    try {
+      const ok = await createSendRequest(
+        mobileNumber.trim(),
+        numAmt,
+        method as TransferMethod,
+        comment.trim()
+      );
 
-    setIsSubmitting(false);
-
-    if (ok) {
-      setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} to ${mobileNumber} submitted to Admin for approval.`);
-      setMobileNumber('');
-      setAmount('');
-      setMethod('');
-      setComment('');
-    } else {
-      setErrorMsg('Failed to process request. Please check balance or try again.');
+      if (ok) {
+        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} to ${mobileNumber} submitted to Admin for approval.`);
+        setMobileNumber('');
+        setAmount('');
+        setMethod('');
+        setComment('');
+      } else {
+        setErrorMsg('Failed to process request. Please check balance or try again.');
+      }
+    } catch (err) {
+      console.error('Send request error:', err);
+      setErrorMsg('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

@@ -16,10 +16,13 @@ interface AppContextType {
   createDepositRequest: (amount: number, method: TransferMethod, comment?: string, attachmentUrl?: string, attachmentName?: string) => Promise<boolean>;
   approveTransaction: (txnId: string, adminPin?: string) => void;
   rejectTransaction: (txnId: string, reason?: string) => void;
+  editPendingSendRequest: (txnId: string, data: { recipientMobile?: string; amount?: number; method?: TransferMethod; comment?: string }) => { success: boolean; message: string };
+  cancelPendingSendRequest: (txnId: string) => { success: boolean; message: string };
   updateCommissionRate: (rate: number) => void;
   createUserAccount: (userData: Partial<User>, passwordStr: string) => { success: boolean; message?: string };
   deleteUserAccount: (userId: string) => { success: boolean; message?: string };
   chargeUserBalance: (userId: string, chargeAmount: number, reason?: string) => { success: boolean; message: string };
+  manualAdjustUserBalance: (userId: string, action: 'credit' | 'debit', amount: number, note?: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
 }
@@ -32,6 +35,25 @@ const LOCAL_STORAGE_KEY_NOTIFS = 'masud_telecom_notifs_v1';
 const LOCAL_STORAGE_KEY_AUTH = 'masud_telecom_auth_user_v1';
 const LOCAL_STORAGE_KEY_SETTINGS = 'masud_telecom_settings_v1';
 const LOCAL_STORAGE_KEY_PASSWORDS = 'masud_telecom_passwords_v1';
+
+// Helper to remove undefined properties before saving to Firestore
+function cleanForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  Object.keys(obj).forEach(key => {
+    if (obj[key] !== undefined) {
+      cleaned[key] = obj[key];
+    }
+  });
+  return cleaned;
+}
+
+const safeSaveLocal = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn(`LocalStorage save error for ${key}:`, e);
+  }
+};
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Initialize state from LocalStorage or defaults
@@ -81,7 +103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           // Seed initial users into Firestore
           INITIAL_USERS.forEach(u => {
-            setDoc(doc(db, 'users', u.id), u).catch(() => {});
+            setDoc(doc(db, 'users', u.id), cleanForFirestore(u)).catch(() => {});
           });
         }
       }, err => {
@@ -98,7 +120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setTransactions(fsTxns);
         } else {
           INITIAL_TRANSACTIONS.forEach(t => {
-            setDoc(doc(db, 'transactions', t.id), t).catch(() => {});
+            setDoc(doc(db, 'transactions', t.id), cleanForFirestore(t)).catch(() => {});
           });
         }
       }, err => {
@@ -113,7 +135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setNotifications(fsNotifs);
         } else {
           INITIAL_NOTIFICATIONS.forEach(n => {
-            setDoc(doc(db, 'notifications', n.id), n).catch(() => {});
+            setDoc(doc(db, 'notifications', n.id), cleanForFirestore(n)).catch(() => {});
           });
         }
       }, err => {
@@ -130,30 +152,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Sync state to local storage
+  // Sync state to local storage safely
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_USERS, JSON.stringify(users));
+    safeSaveLocal(LOCAL_STORAGE_KEY_USERS, users);
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_TXNS, JSON.stringify(transactions));
+    safeSaveLocal(LOCAL_STORAGE_KEY_TXNS, transactions);
   }, [transactions]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_NOTIFS, JSON.stringify(notifications));
+    safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, notifications);
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+    safeSaveLocal(LOCAL_STORAGE_KEY_SETTINGS, settings);
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY_PASSWORDS, JSON.stringify(passwords));
+    safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, passwords);
   }, [passwords]);
 
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem(LOCAL_STORAGE_KEY_AUTH, JSON.stringify(currentUser));
+      safeSaveLocal(LOCAL_STORAGE_KEY_AUTH, currentUser);
     } else {
       localStorage.removeItem(LOCAL_STORAGE_KEY_AUTH);
     }
@@ -221,7 +243,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setTransactions(prev => [newTxn, ...prev]);
-    setDoc(doc(db, 'transactions', newTxn.id), newTxn).catch(() => {});
+    setDoc(doc(db, 'transactions', newTxn.id), cleanForFirestore(newTxn)).catch(() => {});
 
     // Notify Admin
     const adminNotif: NotificationItem = {
@@ -234,7 +256,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'alert'
     };
     setNotifications(prev => [adminNotif, ...prev]);
-    setDoc(doc(db, 'notifications', adminNotif.id), adminNotif).catch(() => {});
+    setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
 
     return true;
   };
@@ -246,44 +268,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     attachmentUrl?: string,
     attachmentName?: string
   ): Promise<boolean> => {
-    if (!currentUser) return false;
-    if (amount <= 0) return false;
+    try {
+      if (!currentUser) return false;
+      if (isNaN(amount) || amount <= 0) return false;
 
-    const commission = 0;
+      const commission = 0;
 
-    const newTxn: Transaction = {
-      id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      userEmail: currentUser.email,
-      type: 'deposit',
-      amount,
-      method,
-      comment: comment || 'Deposit Request',
-      attachmentUrl,
-      attachmentName,
-      status: 'pending',
-      commissionEarned: commission,
-      createdAt: new Date().toISOString()
-    };
+      const newTxn: Transaction = {
+        id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        type: 'deposit',
+        amount,
+        method,
+        comment: comment || 'Deposit Request',
+        status: 'pending',
+        commissionEarned: commission,
+        createdAt: new Date().toISOString()
+      };
 
-    setTransactions(prev => [newTxn, ...prev]);
-    setDoc(doc(db, 'transactions', newTxn.id), newTxn).catch(() => {});
+      if (attachmentUrl) newTxn.attachmentUrl = attachmentUrl;
+      if (attachmentName) newTxn.attachmentName = attachmentName;
 
-    // Notify Admin
-    const adminNotif: NotificationItem = {
-      id: `notif-${Date.now()}`,
-      userId: 'admin',
-      title: 'New Deposit Request',
-      message: `${currentUser.name} submitted a Deposit Request of ৳${amount.toLocaleString('en-BD')} via ${method}.`,
-      timestamp: 'Just now',
-      read: false,
-      type: 'alert'
-    };
-    setNotifications(prev => [adminNotif, ...prev]);
-    setDoc(doc(db, 'notifications', adminNotif.id), adminNotif).catch(() => {});
+      setTransactions(prev => [newTxn, ...prev]);
+      setDoc(doc(db, 'transactions', newTxn.id), cleanForFirestore(newTxn)).catch(err => {
+        console.warn('Firestore write error for deposit:', err);
+      });
 
-    return true;
+      // Notify Admin
+      const adminNotif: NotificationItem = {
+        id: `notif-${Date.now()}`,
+        userId: 'admin',
+        title: 'New Deposit Request',
+        message: `${currentUser.name} submitted a Deposit Request of ৳${amount.toLocaleString('en-BD')} via ${method}.`,
+        timestamp: 'Just now',
+        read: false,
+        type: 'alert'
+      };
+      setNotifications(prev => [adminNotif, ...prev]);
+      setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(err => {
+        console.warn('Firestore notification error:', err);
+      });
+
+      return true;
+    } catch (e) {
+      console.error('Failed to create deposit request:', e);
+      return false;
+    }
   };
 
   const approveTransaction = (txnId: string, adminPin?: string) => {
@@ -298,7 +330,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions(prev =>
       prev.map(t => (t.id === txnId ? updatedTxn : t))
     );
-    setDoc(doc(db, 'transactions', txnId), updatedTxn).catch(() => {});
+    setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
 
     // Update user balance & stats
     setUsers(prev =>
@@ -309,7 +341,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const newBalance = isDeposit ? u.balance + txn.amount : u.balance - txn.amount;
           const newTotalSend = isSend ? u.totalSend + txn.amount : u.totalSend;
-          const newTotalComm = (newTotalSend / 1000) * 7.5;
+
+          // Calculate current commission balance (fallback to gross send formula if undefined)
+          const currentComm = u.totalCommission !== undefined
+            ? u.totalCommission
+            : ((u.totalSend || 0) / 1000) * 7.5;
+
+          // Add commission earned only for this new send transaction
+          const addedComm = isSend ? (txn.commissionEarned || (txn.amount / 1000) * 7.5) : 0;
+          const newTotalComm = currentComm + addedComm;
 
           const updatedUser = {
             ...u,
@@ -317,7 +357,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             totalSend: newTotalSend,
             totalCommission: newTotalComm
           };
-          setDoc(doc(db, 'users', u.id), updatedUser).catch(() => {});
+          setDoc(doc(db, 'users', u.id), cleanForFirestore(updatedUser)).catch(() => {});
           return updatedUser;
         }
         return u;
@@ -337,7 +377,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txnId: txn.id
     };
     setNotifications(prev => [userNotif, ...prev]);
-    setDoc(doc(db, 'notifications', userNotif.id), userNotif).catch(() => {});
+    setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
   };
 
   const chargeUserBalance = (userId: string, chargeAmount: number, reason?: string) => {
@@ -349,25 +389,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'User not found.' };
     }
 
-    // Subtract charge from user available balance & user commission
+    // Always deduct charge from user available balance & total commission (Debit)
     setUsers(prev =>
       prev.map(u => {
         if (u.id === userId) {
           const grossComm = ((u.totalSend || 0) / 1000) * 7.5;
           const currentComm = u.totalCommission !== undefined ? u.totalCommission : grossComm;
+
+          const newBalance = u.balance - chargeAmount;
+          const newCommission = Math.max(0, currentComm - chargeAmount);
+
           const updatedUser = {
             ...u,
-            balance: Math.max(0, u.balance - chargeAmount),
-            totalCommission: Math.max(0, currentComm - chargeAmount)
+            balance: newBalance,
+            totalCommission: newCommission
           };
-          setDoc(doc(db, 'users', u.id), updatedUser).catch(() => {});
+          setDoc(doc(db, 'users', u.id), cleanForFirestore(updatedUser)).catch(() => {});
           return updatedUser;
         }
         return u;
       })
     );
 
-    // Record charge transaction
+    // Record charge transaction as Debit
     const chargeTxn: Transaction = {
       id: `CHG-${Math.floor(1000 + Math.random() * 9000)}`,
       userId: targetUser.id,
@@ -376,32 +420,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'charge',
       amount: chargeAmount,
       method: 'Cash',
-      comment: reason || 'Service Charge / Admin Deduction',
+      comment: reason || 'Service Charge / Commission Debit',
       status: 'approved',
       commissionEarned: 0,
       createdAt: new Date().toISOString(),
       approvedAt: new Date().toISOString()
     };
     setTransactions(prev => [chargeTxn, ...prev]);
-    setDoc(doc(db, 'transactions', chargeTxn.id), chargeTxn).catch(() => {});
+    setDoc(doc(db, 'transactions', chargeTxn.id), cleanForFirestore(chargeTxn)).catch(() => {});
 
     // Send notification
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       userId: targetUser.id,
-      title: 'Commission Charge & Balance Deduction',
-      message: `A charge of ৳${chargeAmount.toLocaleString('en-BD')} was deducted from your available balance and earned commission. Reason: ${reason || 'Admin Commission Charge'}`,
+      title: 'Commission Charge (Debit)',
+      message: `A commission charge of ৳${chargeAmount.toLocaleString('en-BD')} was debited from your available balance. Reason: ${reason || 'Admin Commission Charge'}`,
       timestamp: 'Just now',
       read: false,
       type: 'warning',
       txnId: chargeTxn.id
     };
     setNotifications(prev => [notif, ...prev]);
-    setDoc(doc(db, 'notifications', notif.id), notif).catch(() => {});
+    setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
     return {
       success: true,
-      message: `Successfully charged ৳${chargeAmount.toLocaleString('en-BD')} from ${targetUser.name}'s balance.`
+      message: `Successfully debited ৳${chargeAmount.toLocaleString('en-BD')} from ${targetUser.name}'s balance.`
+    };
+  };
+
+  const manualAdjustUserBalance = (
+    userId: string,
+    action: 'credit' | 'debit',
+    amount: number,
+    note?: string
+  ): { success: boolean; message: string } => {
+    if (amount <= 0) {
+      return { success: false, message: 'Amount must be greater than 0.' };
+    }
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      return { success: false, message: 'User not found.' };
+    }
+
+    const isCredit = action === 'credit';
+    const commentText = note
+      ? `${isCredit ? 'Admin Manual Credit' : 'Admin Manual Debit'}: ${note}`
+      : `${isCredit ? 'Admin Manual Credit' : 'Admin Manual Debit / Charge'}`;
+
+    // Update user balance in state & Firestore
+    setUsers(prev =>
+      prev.map(u => {
+        if (u.id === userId) {
+          const newBalance = isCredit ? u.balance + amount : u.balance - amount;
+          const grossComm = ((u.totalSend || 0) / 1000) * 7.5;
+          const currentComm = u.totalCommission !== undefined ? u.totalCommission : grossComm;
+          const newCommission = isCredit ? currentComm : Math.max(0, currentComm - amount);
+
+          const updatedUser = {
+            ...u,
+            balance: newBalance,
+            totalCommission: newCommission
+          };
+          setDoc(doc(db, 'users', u.id), cleanForFirestore(updatedUser)).catch(() => {});
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+
+    // Record adjustment transaction
+    const adjustTxn: Transaction = {
+      id: `${isCredit ? 'CRD' : 'DBT'}-${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: targetUser.id,
+      userName: targetUser.name,
+      userEmail: targetUser.email,
+      type: isCredit ? 'deposit' : 'charge',
+      amount: amount,
+      method: isCredit ? 'Admin Credit' : 'Admin Debit',
+      comment: commentText,
+      status: 'approved',
+      commissionEarned: 0,
+      createdAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString()
+    };
+
+    setTransactions(prev => [adjustTxn, ...prev]);
+    setDoc(doc(db, 'transactions', adjustTxn.id), cleanForFirestore(adjustTxn)).catch(() => {});
+
+    // Send notification to user
+    const notif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      userId: targetUser.id,
+      title: isCredit ? 'Account Credited (+ Balance)' : 'Account Debited (- Balance)',
+      message: isCredit
+        ? `৳${amount.toLocaleString('en-BD')} was manually credited to your balance by Admin. ${note ? `Note: ${note}` : ''}`
+        : `৳${amount.toLocaleString('en-BD')} was manually debited from your balance by Admin. ${note ? `Note: ${note}` : ''}`,
+      timestamp: 'Just now',
+      read: false,
+      type: isCredit ? 'success' : 'warning',
+      txnId: adjustTxn.id
+    };
+
+    setNotifications(prev => [notif, ...prev]);
+    setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
+
+    return {
+      success: true,
+      message: `Successfully ${isCredit ? 'credited (+)' : 'debited (-)'} ৳${amount.toLocaleString('en-BD')} for ${targetUser.name}.`
     };
   };
 
@@ -414,7 +540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions(prev =>
       prev.map(t => (t.id === txnId ? updatedTxn : t))
     );
-    setDoc(doc(db, 'transactions', txnId), updatedTxn).catch(() => {});
+    setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
 
     const userNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -427,7 +553,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txnId: txn.id
     };
     setNotifications(prev => [userNotif, ...prev]);
-    setDoc(doc(db, 'notifications', userNotif.id), userNotif).catch(() => {});
+    setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
+  };
+
+  const editPendingSendRequest = (
+    txnId: string,
+    data: { recipientMobile?: string; amount?: number; method?: TransferMethod; comment?: string }
+  ): { success: boolean; message: string } => {
+    const txn = transactions.find(t => t.id === txnId);
+    if (!txn) return { success: false, message: 'Transaction not found.' };
+    if (txn.status !== 'pending') return { success: false, message: 'Only pending transactions can be edited.' };
+
+    const createdTime = new Date(txn.createdAt).getTime();
+    const now = Date.now();
+    const diffMinutes = (now - createdTime) / (1000 * 60);
+
+    if (diffMinutes > 10) {
+      return {
+        success: false,
+        message: 'Time limit reached (10 mins). Contact Admin to edit or cancel this transaction.'
+      };
+    }
+
+    const newAmount = data.amount !== undefined ? data.amount : txn.amount;
+    const newCommission = (newAmount / 1000) * 7.5;
+
+    const updatedTxn: Transaction = {
+      ...txn,
+      recipientMobile: data.recipientMobile !== undefined ? data.recipientMobile : txn.recipientMobile,
+      amount: newAmount,
+      method: data.method !== undefined ? data.method : txn.method,
+      comment: data.comment !== undefined ? data.comment : txn.comment,
+      commissionEarned: newCommission
+    };
+
+    setTransactions(prev => prev.map(t => (t.id === txnId ? updatedTxn : t)));
+    setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
+
+    return { success: true, message: 'Transaction updated successfully!' };
+  };
+
+  const cancelPendingSendRequest = (txnId: string): { success: boolean; message: string } => {
+    const txn = transactions.find(t => t.id === txnId);
+    if (!txn) return { success: false, message: 'Transaction not found.' };
+    if (txn.status !== 'pending') return { success: false, message: 'Only pending transactions can be cancelled.' };
+
+    const createdTime = new Date(txn.createdAt).getTime();
+    const now = Date.now();
+    const diffMinutes = (now - createdTime) / (1000 * 60);
+
+    if (diffMinutes > 10) {
+      return {
+        success: false,
+        message: 'Time limit reached (10 mins). Contact Admin to edit or cancel this transaction.'
+      };
+    }
+
+    const updatedTxn: Transaction = {
+      ...txn,
+      status: 'rejected',
+      rejectionReason: 'Cancelled by user within 10-minute window'
+    };
+
+    setTransactions(prev => prev.map(t => (t.id === txnId ? updatedTxn : t)));
+    setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
+
+    return { success: true, message: 'Send request cancelled successfully.' };
   };
 
   const updateCommissionRate = (rate: number) => {
@@ -520,10 +711,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createDepositRequest,
         approveTransaction,
         rejectTransaction,
+        editPendingSendRequest,
+        cancelPendingSendRequest,
         updateCommissionRate,
         createUserAccount,
         deleteUserAccount,
         chargeUserBalance,
+        manualAdjustUserBalance,
         markNotificationRead,
         clearNotifications
       }}

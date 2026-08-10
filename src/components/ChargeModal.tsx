@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, Transaction } from '../types';
-import { X, Percent, Calculator, ArrowDownRight, DollarSign, CheckCircle2, History, AlertCircle } from 'lucide-react';
+import { User } from '../types';
+import { X, Percent, Calculator, ArrowDownRight, ArrowUpRight, CheckCircle2, History, AlertCircle, PlusCircle, MinusCircle } from 'lucide-react';
 
 interface ChargeModalProps {
   user: User;
   onClose: () => void;
+  defaultMode?: 'credit' | 'debit';
 }
 
-export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
-  const { currentUser, transactions, chargeUserBalance, users } = useApp();
-  const [chargeAmount, setChargeAmount] = useState('');
+export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose, defaultMode = 'credit' }) => {
+  const { currentUser, transactions, manualAdjustUserBalance, users } = useApp();
+  const [mode, setMode] = useState<'credit' | 'debit'>(defaultMode);
+  const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,7 +22,16 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
   // Get live user from state to reflect instant updates
   const liveUser = users.find(u => u.id === user.id) || user;
 
-  // Filter charges for this user
+  // Filter transactions for this user (both manual credits and charges/debits)
+  const userAdjustments = transactions.filter(
+    t => t.userId === liveUser.id && (
+      t.type === 'charge' || 
+      t.comment?.toLowerCase().includes('credit') || 
+      t.comment?.toLowerCase().includes('debit') ||
+      t.method?.toLowerCase().includes('admin')
+    )
+  );
+
   const userCharges = transactions.filter(
     t => t.userId === liveUser.id && (t.type === 'charge' || t.comment?.toLowerCase().includes('charge'))
   );
@@ -33,23 +44,23 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
     ? liveUser.totalCommission
     : Math.max(0, grossCommission - userChargesTotal);
 
-  const handleApplyCharge = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
-    const amt = parseFloat(chargeAmount);
+    const amt = parseFloat(amount);
     if (!amt || isNaN(amt) || amt <= 0) {
-      setFeedback({ type: 'error', msg: 'Please enter a valid charge amount greater than 0.' });
+      setFeedback({ type: 'error', msg: 'Please enter a valid amount greater than 0.' });
       return;
     }
 
     setIsSubmitting(true);
-    const result = chargeUserBalance(liveUser.id, amt, reason.trim() || 'Admin Service Charge');
+    const result = manualAdjustUserBalance(liveUser.id, mode, amt, reason.trim());
     setIsSubmitting(false);
 
     if (result.success) {
       setFeedback({ type: 'success', msg: result.message });
-      setChargeAmount('');
+      setAmount('');
       setReason('');
     } else {
       setFeedback({ type: 'error', msg: result.message });
@@ -67,13 +78,13 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
               <Percent className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold tracking-tight">Commission & Charge Box</h2>
-              <p className="text-xs text-slate-400 font-medium">User: {liveUser.name} ({liveUser.mobile})</p>
+              <h2 className="text-base font-bold tracking-tight">Admin Credit & Debit Control Box</h2>
+              <p className="text-xs text-slate-400 font-medium">User: {liveUser.name} ({liveUser.mobile || liveUser.email})</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -81,7 +92,7 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
 
         <div className="p-5 space-y-5">
 
-          {/* Commission Calculation Card */}
+          {/* Commission & Live Balance Summary Card */}
           <div className="bg-gradient-to-br from-slate-50 to-emerald-50/50 p-4 rounded-2xl border border-emerald-200/80 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -112,27 +123,61 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
             <div className="bg-white p-3 rounded-xl border border-blue-200 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-500 block">User Available Balance</span>
-                <strong className="text-sm font-black text-blue-950 font-mono">
-                  ৳{liveUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                <strong className={`text-sm font-black font-mono ${liveUser.balance < 0 ? 'text-rose-600' : 'text-blue-950'}`}>
+                  {liveUser.balance < 0
+                    ? `-৳${Math.abs(liveUser.balance).toLocaleString('en-BD', { minimumFractionDigits: 2 })}`
+                    : `৳${liveUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}`}
                 </strong>
               </div>
-              <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                Active Account
-              </span>
+              {liveUser.balance < 0 ? (
+                <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300">
+                  Negative Balance
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                  Active Account
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Admin Charge Table & Input Form */}
+          {/* Admin Credit / Debit Form with Tabs */}
           {isAdmin ? (
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-rose-600" />
-                  Apply Charge to User Balance
-                </h3>
-                <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                  Admin Control
-                </span>
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-4">
+              
+              {/* Tab Selector */}
+              <div className="flex bg-slate-200 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('credit');
+                    setFeedback(null);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    mode === 'credit'
+                      ? 'bg-emerald-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ Manual Credit (Add Balance)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('debit');
+                    setFeedback(null);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    mode === 'debit'
+                      ? 'bg-rose-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MinusCircle className="w-4 h-4" />
+                  <span>- Manual Debit (Deduct)</span>
+                </button>
               </div>
 
               {feedback && (
@@ -152,33 +197,37 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
                 </div>
               )}
 
-              <form onSubmit={handleApplyCharge} className="space-y-3">
+              <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Charge Amount (৳) *
+                      {mode === 'credit' ? 'Credit Amount (৳) *' : 'Debit Amount (৳) *'}
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      placeholder="e.g. 50"
-                      value={chargeAmount}
-                      onChange={e => setChargeAmount(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 font-mono"
+                      placeholder="e.g. 500"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      className={`w-full bg-white border rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none font-mono ${
+                        mode === 'credit'
+                          ? 'border-emerald-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600'
+                          : 'border-rose-300 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-600'
+                      }`}
                       required
                     />
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Reason / Note
+                      Reason / Reference Note
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Service Fee"
+                      placeholder={mode === 'credit' ? 'e.g. Manual Deposit / Bonus' : 'e.g. Service Charge / Comm'}
                       value={reason}
                       onChange={e => setReason(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-900"
                     />
                   </div>
                 </div>
@@ -186,53 +235,73 @@ export const ChargeModal: React.FC<ChargeModalProps> = ({ user, onClose }) => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer shadow-sm"
+                  className={`w-full font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer shadow-sm text-white ${
+                    mode === 'credit'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
                 >
-                  <ArrowDownRight className="w-4 h-4" />
-                  <span>Deduct & Charge from User Balance</span>
+                  {mode === 'credit' ? (
+                    <>
+                      <ArrowUpRight className="w-4 h-4" />
+                      <span>+ Credit & Add Funds (+৳{amount || '0'})</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownRight className="w-4 h-4" />
+                      <span>- Deduct & Debit Balance (-৳{amount || '0'})</span>
+                    </>
+                  )}
                 </button>
               </form>
             </div>
           ) : (
             <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs text-slate-600 font-medium text-center">
-              Account charge deductions are managed directly by Admin.
+              Account credit and debit balance adjustments are managed directly by Admin.
             </div>
           )}
 
-          {/* Charge Table / History */}
+          {/* Manual Adjustments & Charge History */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <History className="w-4 h-4 text-blue-900" />
-                Charge History Table ({userCharges.length})
+                Adjustment Activity History ({userAdjustments.length})
               </h3>
             </div>
 
-            {userCharges.length === 0 ? (
+            {userAdjustments.length === 0 ? (
               <div className="bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
-                No previous charges recorded for this user.
+                No manual credit/debit adjustments recorded for this user yet.
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden text-xs">
                 <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
-                  {userCharges.map(c => (
-                    <div key={c.id} className="p-2.5 flex items-center justify-between hover:bg-slate-50">
-                      <div>
-                        <div className="font-bold text-slate-900">{c.comment || 'Service Charge'}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          {c.id} • {new Date(c.createdAt).toLocaleString('en-BD')}
+                  {userAdjustments.map(c => {
+                    const isCreditItem = c.type === 'deposit' || c.comment?.toLowerCase().includes('credit');
+                    return (
+                      <div key={c.id} className="p-2.5 flex items-center justify-between hover:bg-slate-50">
+                        <div>
+                          <div className="font-bold text-slate-900">{c.comment || (isCreditItem ? 'Admin Credit' : 'Service Charge Debit')}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {c.id} &bull; {new Date(c.createdAt).toLocaleString('en-BD')}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-mono font-black text-sm ${isCreditItem ? 'text-emerald-700' : 'text-rose-600'}`}>
+                            {isCreditItem ? '+' : '-'}৳{c.amount.toLocaleString('en-BD')}
+                          </span>
+                          <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded inline-block ml-1 border ${
+                            isCreditItem 
+                              ? 'text-emerald-800 bg-emerald-50 border-emerald-200' 
+                              : 'text-rose-800 bg-rose-50 border-rose-200'
+                          }`}>
+                            {isCreditItem ? 'Credit' : 'Debit'}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-mono font-black text-rose-600 text-sm">
-                          -৳{c.amount.toLocaleString('en-BD')}
-                        </span>
-                        <div className="text-[9px] font-bold uppercase text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded inline-block ml-1 border border-rose-200">
-                          Deducted
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

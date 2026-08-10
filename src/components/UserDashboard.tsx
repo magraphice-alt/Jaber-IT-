@@ -4,6 +4,8 @@ import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCa
 import { UserTab } from './UserNavbar';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
+import { PendingSendWidget } from './PendingSendWidget';
+import { EditSendModal } from './EditSendModal';
 import { Transaction } from '../types';
 
 interface UserDashboardProps {
@@ -14,6 +16,7 @@ interface UserDashboardProps {
 export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpenNotifications }) => {
   const { currentUser, transactions, notifications } = useApp();
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
+  const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
   const [isChargeModalOpen, setIsChargeModalOpen] = useState(false);
 
   const unreadCount = notifications.filter(
@@ -77,16 +80,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
         {/* Available Balance Card */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Available Balance
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+              <span>Available Balance</span>
+              {currentUser && currentUser.balance < 0 && (
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                  Credit / Negative
+                </span>
+              )}
             </span>
             <button className="text-slate-400 hover:text-slate-600 p-1">
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="text-3xl font-extrabold text-slate-900 tracking-tight my-1">
-            ৳{currentUser?.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+          <div className={`text-3xl font-extrabold tracking-tight my-1 font-mono ${currentUser && currentUser.balance < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+            {currentUser && currentUser.balance < 0
+              ? `-৳${Math.abs(currentUser.balance).toLocaleString('en-BD', { minimumFractionDigits: 2 })}`
+              : `৳${(currentUser?.balance || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}`}
           </div>
 
           <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 mt-2">
@@ -222,6 +232,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
                           </button>
                         </div>
                       )}
+
+                      {/* Pending Send Widget with 10-Min Timer Bar */}
+                      {t.status === 'pending' && (
+                        <PendingSendWidget
+                          transaction={t}
+                          onOpenEdit={() => setSelectedEditTxn(t)}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -259,6 +277,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
         <ReceiptModal
           transaction={selectedReceiptTxn}
           onClose={() => setSelectedReceiptTxn(null)}
+        />
+      )}
+
+      {selectedEditTxn && (
+        <EditSendModal
+          transaction={selectedEditTxn}
+          onClose={() => setSelectedEditTxn(null)}
         />
       )}
 

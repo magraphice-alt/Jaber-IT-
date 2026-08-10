@@ -32,7 +32,8 @@ import {
   Percent,
   Trash2,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  MinusCircle
 } from 'lucide-react';
 import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
@@ -47,6 +48,7 @@ export type AdminTab = 'dashboard' | 'users' | 'create' | 'help' | 'profile';
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotifications }) => {
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [chargeModalUser, setChargeModalUser] = useState<User | null>(null);
+  const [chargeModalMode, setChargeModalMode] = useState<'credit' | 'debit'>('credit');
   const {
     currentUser,
     users,
@@ -58,8 +60,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     updateCommissionRate,
     createUserAccount,
     deleteUserAccount,
+    manualAdjustUserBalance,
     logout
   } = useApp();
+
+  const [inlineAdjustAmount, setInlineAdjustAmount] = useState('');
+  const [inlineAdjustNote, setInlineAdjustNote] = useState('');
+  const [inlineAdjustMsg, setInlineAdjustMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -733,30 +740,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                         </div>
 
                         {u.role !== 'admin' && (
-                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center font-mono text-xs">
-                            <div className="bg-slate-50 p-1.5 rounded">
-                              <span className="text-[10px] text-slate-600 block">Balance</span>
-                              <strong className="text-slate-900">৳{u.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</strong>
+                          <div className="space-y-2 pt-2 border-t border-slate-100 font-mono text-xs">
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                              <div className="bg-slate-50 p-1.5 rounded">
+                                <span className="text-[10px] text-slate-600 block">Balance</span>
+                                <strong className={u.balance < 0 ? "text-rose-600 font-extrabold" : "text-slate-900"}>
+                                  {u.balance < 0 ? `-৳${Math.abs(u.balance).toLocaleString('en-BD', { minimumFractionDigits: 2 })}` : `৳${u.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}`}
+                                </strong>
+                              </div>
+                              <div className="bg-slate-50 p-1.5 rounded">
+                                <span className="text-[10px] text-slate-600 block">Total Send</span>
+                                <strong className="text-blue-900">৳{(u.totalSend || 0).toLocaleString('en-BD')}</strong>
+                              </div>
+                              <div
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setChargeModalMode('debit');
+                                  setChargeModalUser(u);
+                                }}
+                                className="bg-emerald-50/90 p-1.5 rounded border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors"
+                                title="Tap to open Charge / Comm Box"
+                              >
+                                <span className="text-[10px] text-emerald-800 font-bold block">Commission</span>
+                                <strong className="text-emerald-700">
+                                  ৳{(u.totalCommission !== undefined 
+                                    ? u.totalCommission 
+                                    : Math.max(0, (((u.totalSend || 0) / 1000) * 7.5) - transactions.filter(t => t.userId === u.id && t.type === 'charge').reduce((acc, t) => acc + t.amount, 0))
+                                  ).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </strong>
+                              </div>
                             </div>
-                            <div className="bg-slate-50 p-1.5 rounded">
-                              <span className="text-[10px] text-slate-600 block">Total Send</span>
-                              <strong className="text-blue-900">৳{(u.totalSend || 0).toLocaleString('en-BD')}</strong>
-                            </div>
-                            <div
-                              onClick={e => {
-                                e.stopPropagation();
-                                setChargeModalUser(u);
-                              }}
-                              className="bg-emerald-50/90 p-1.5 rounded border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors"
-                              title="Tap to open Charge Box"
-                            >
-                              <span className="text-[10px] text-emerald-800 font-bold block">Commission</span>
-                              <strong className="text-emerald-700">
-                                ৳{(u.totalCommission !== undefined 
-                                  ? u.totalCommission 
-                                  : Math.max(0, (((u.totalSend || 0) / 1000) * 7.5) - transactions.filter(t => t.userId === u.id && t.type === 'charge').reduce((acc, t) => acc + t.amount, 0))
-                                ).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </strong>
+
+                            {/* Admin Quick Credit / Debit Controls */}
+                            <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setChargeModalMode('credit');
+                                  setChargeModalUser(u);
+                                }}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5 text-emerald-200" />
+                                <span>+ Credit</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setChargeModalMode('debit');
+                                  setChargeModalUser(u);
+                                }}
+                                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                              >
+                                <MinusCircle className="w-3.5 h-3.5 text-rose-200" />
+                                <span>- Debit</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setChargeModalMode('credit');
+                                  setChargeModalUser(u);
+                                }}
+                                className="bg-blue-900 hover:bg-blue-800 text-white font-bold text-[11px] py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                                title="Open Credit & Debit Control Box"
+                              >
+                                <Percent className="w-3.5 h-3.5 text-blue-300" />
+                                <span>Box</span>
+                              </button>
                             </div>
                           </div>
                         )}
@@ -856,7 +908,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                         <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 font-mono text-xs">
                           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                             <span className="text-[10px] text-slate-500 uppercase font-semibold block">Current Balance</span>
-                            <strong className="text-sm font-extrabold text-slate-900">৳{selectedUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</strong>
+                            <strong className={`text-sm font-extrabold ${selectedUser.balance < 0 ? "text-rose-600" : "text-slate-900"}`}>
+                              {selectedUser.balance < 0 ? `-৳${Math.abs(selectedUser.balance).toLocaleString('en-BD', { minimumFractionDigits: 2 })}` : `৳${selectedUser.balance.toLocaleString('en-BD', { minimumFractionDigits: 2 })}`}
+                            </strong>
                           </div>
                           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                             <span className="text-[10px] text-slate-500 uppercase font-semibold block">Comm Rate</span>
@@ -880,6 +934,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                         </div>
                       )}
                     </div>
+
+                    {/* Admin Manual Credit & Debit Action Panel */}
+                    {selectedUser.role !== 'admin' && (
+                      <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-3 shadow-md border border-slate-800">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="w-4 h-4 text-emerald-400" />
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-100">
+                              Admin Manual Credit & Debit Control
+                            </h3>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChargeModalMode('credit');
+                              setChargeModalUser(selectedUser);
+                            }}
+                            className="text-[10px] font-bold text-blue-300 hover:text-blue-100 underline cursor-pointer"
+                          >
+                            Open Control Box
+                          </button>
+                        </div>
+
+                        {inlineAdjustMsg && (
+                          <div
+                            className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                              inlineAdjustMsg.type === 'success'
+                                ? 'bg-emerald-950 text-emerald-200 border border-emerald-800'
+                                : 'bg-rose-950 text-rose-200 border border-rose-800'
+                            }`}
+                          >
+                            {inlineAdjustMsg.type === 'success' ? (
+                              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                            ) : (
+                              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                            )}
+                            <span>{inlineAdjustMsg.text}</span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                              Adjustment Amount (৳) *
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="e.g. 1000"
+                              value={inlineAdjustAmount}
+                              onChange={e => setInlineAdjustAmount(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-400 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase">
+                              Reason / Reference Note
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Cash deposit / Adjustment"
+                              value={inlineAdjustNote}
+                              onChange={e => setInlineAdjustNote(e.target.value)}
+                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white outline-none focus:border-emerald-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const amt = parseFloat(inlineAdjustAmount);
+                              if (!amt || isNaN(amt) || amt <= 0) {
+                                setInlineAdjustMsg({ type: 'error', text: 'Please enter a valid amount greater than 0.' });
+                                return;
+                              }
+                              const res = manualAdjustUserBalance(selectedUser.id, 'credit', amt, inlineAdjustNote.trim());
+                              if (res.success) {
+                                setInlineAdjustMsg({ type: 'success', text: res.message });
+                                setInlineAdjustAmount('');
+                                setInlineAdjustNote('');
+                              } else {
+                                setInlineAdjustMsg({ type: 'error', text: res.message });
+                              }
+                            }}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5 text-emerald-200" />
+                            <span>+ Credit (+৳{inlineAdjustAmount || '0'})</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const amt = parseFloat(inlineAdjustAmount);
+                              if (!amt || isNaN(amt) || amt <= 0) {
+                                setInlineAdjustMsg({ type: 'error', text: 'Please enter a valid amount greater than 0.' });
+                                return;
+                              }
+                              const res = manualAdjustUserBalance(selectedUser.id, 'debit', amt, inlineAdjustNote.trim());
+                              if (res.success) {
+                                setInlineAdjustMsg({ type: 'success', text: res.message });
+                                setInlineAdjustAmount('');
+                                setInlineAdjustNote('');
+                              } else {
+                                setInlineAdjustMsg({ type: 'error', text: res.message });
+                              }
+                            }}
+                            className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <MinusCircle className="w-3.5 h-3.5 text-rose-200" />
+                            <span>- Debit (-৳{inlineAdjustAmount || '0'})</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Filter Bar */}
                     <div className="space-y-2">
@@ -1565,6 +1737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       {chargeModalUser && (
         <ChargeModal
           user={users.find(u => u.id === chargeModalUser.id) || chargeModalUser}
+          defaultMode={chargeModalMode}
           onClose={() => setChargeModalUser(null)}
         />
       )}

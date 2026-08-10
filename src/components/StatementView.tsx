@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
+import { PendingSendWidget } from './PendingSendWidget';
+import { EditSendModal } from './EditSendModal';
 import { Transaction } from '../types';
 
 interface StatementViewProps {
@@ -11,6 +13,7 @@ interface StatementViewProps {
 export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotifications }) => {
   const { transactions, currentUser, notifications } = useApp();
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
+  const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
 
   const [singleDate, setSingleDate] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -293,6 +296,14 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                     </div>
                   )}
 
+                  {/* Pending Send Widget with 10-Min Timer Bar */}
+                  {t.status === 'pending' && (
+                    <PendingSendWidget
+                      transaction={t}
+                      onOpenEdit={() => setSelectedEditTxn(t)}
+                    />
+                  )}
+
                   {/* Last: View Receipt Button */}
                   <div className="pt-2 border-t border-slate-100 flex justify-end">
                     <button
@@ -318,6 +329,13 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
         <ReceiptModal
           transaction={selectedReceiptTxn}
           onClose={() => setSelectedReceiptTxn(null)}
+        />
+      )}
+
+      {selectedEditTxn && (
+        <EditSendModal
+          transaction={selectedEditTxn}
+          onClose={() => setSelectedEditTxn(null)}
         />
       )}
     </div>
