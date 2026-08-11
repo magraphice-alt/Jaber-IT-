@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Transaction } from '../types';
+import { useApp } from '../context/AppContext';
 import {
   X,
   Printer,
@@ -10,7 +11,8 @@ import {
   Copy,
   Check,
   FileText,
-  MessageCircle
+  MessageCircle,
+  MapPin
 } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -19,9 +21,15 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose }) => {
+  const { users, currentUser } = useApp();
   const [copiedText, setCopiedText] = useState(false);
 
   if (!transaction) return null;
+
+  // Resolve target user name & address for receipt header
+  const userObj = users.find(u => u.id === transaction.userId) || (currentUser?.id === transaction.userId ? currentUser : null);
+  const receiptUserName = transaction.userName || userObj?.name || (currentUser?.id === transaction.userId ? currentUser?.name : '') || 'Customer';
+  const receiptUserAddress = userObj?.address || (currentUser?.id === transaction.userId ? currentUser?.address : '') || 'Dhaka, Bangladesh';
 
   const isApproved = transaction.status === 'approved';
   const receiptDate = new Date(transaction.approvedAt || transaction.createdAt).toLocaleString('en-BD', {
@@ -30,8 +38,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
   });
 
   const formattedMessage = `
-📄 *MASUD TELECOM - OFFICIAL MONEY RECEIPT*
+📄 *OFFICIAL MONEY RECEIPT - ${receiptUserName.toUpperCase()}*
 ───────────────────────────────
+*User Name:* ${receiptUserName}
+*Address:* ${receiptUserAddress}
 *Txn ID:* ${transaction.id}
 *Date:* ${receiptDate}
 *Status:* ${transaction.status.toUpperCase()}
@@ -41,7 +51,7 @@ ${transaction.recipientMobile ? `*Target Number:* ${transaction.recipientMobile}
     transaction.adminPin ? `*Admin Security PIN:* ${transaction.adminPin}\n` : ''
 }*Amount:* ৳${transaction.amount.toLocaleString('en-BD')}
 ───────────────────────────────
-Thank you
+Thank you - Masud Telecom
   `.trim();
 
   const handleWhatsAppShare = () => {
@@ -206,14 +216,18 @@ Thank you
           >
             {/* Header / Brand */}
             <div className="text-center border-b pb-3 border-dashed border-slate-300">
-              <div className="inline-flex items-center gap-1.5 bg-blue-900 text-white px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase mb-1">
+              <div className="inline-flex items-center gap-1.5 bg-blue-900 text-white px-3.5 py-1 rounded-full text-xs font-black tracking-wider uppercase mb-1 shadow-xs">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
-                MASUD TELECOM
+                {receiptUserName}
               </div>
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+              <p className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1 my-0.5">
+                <MapPin className="w-3 h-3 text-blue-900 shrink-0" />
+                <span>{receiptUserAddress}</span>
+              </p>
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1">
                 Official Digital Money Receipt
               </p>
-              <p className="text-[10px] text-slate-400">Dhaka, Bangladesh &bull; Helpline: +880 1700-000000</p>
+              <p className="text-[10px] text-slate-400">Masud Telecom &bull; Helpline: +880 1700-000000</p>
             </div>
 
             {/* Approved Stamp Badge */}
@@ -239,6 +253,11 @@ Thank you
 
             {/* Main Table Details */}
             <div className="space-y-2 text-xs divide-y divide-slate-100">
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500 font-medium">User / Customer Name:</span>
+                <strong className="text-slate-900 font-bold">{receiptUserName}</strong>
+              </div>
+
               <div className="flex justify-between py-1">
                 <span className="text-slate-500 font-medium">Transfer Type:</span>
                 <span className="font-bold uppercase text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px]">

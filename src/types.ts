@@ -5,6 +5,7 @@ export interface User {
   name: string;
   email: string;
   mobile: string;
+  address?: string;
   role: UserRole;
   balance: number;
   commissionRate: number; // e.g. 2.5 for 2.5%

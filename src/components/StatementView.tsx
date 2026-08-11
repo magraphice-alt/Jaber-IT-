@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText } from 'lucide-react';
+import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
 import { Transaction } from '../types';
+import { generateStatementPDF } from '../utils/pdfGenerator';
 
 interface StatementViewProps {
   onOpenNotifications: () => void;
@@ -15,11 +16,14 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
 
+  const [selectType, setSelectType] = useState<'' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number'>('');
   const [singleDate, setSingleDate] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [searchMobile, setSearchMobile] = useState('');
+
   const [activeFilter, setActiveFilter] = useState<{
+    selectType?: '' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number';
     singleDate?: string;
     fromDate?: string;
     toDate?: string;
@@ -33,14 +37,16 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setActiveFilter({
-      singleDate: singleDate || undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined,
+      selectType,
+      singleDate: selectType !== 'only_number' ? (singleDate || undefined) : undefined,
+      fromDate: selectType !== 'only_number' ? (fromDate || undefined) : undefined,
+      toDate: selectType !== 'only_number' ? (toDate || undefined) : undefined,
       mobile: searchMobile.trim() || undefined
     });
   };
 
   const handleClearFilter = () => {
+    setSelectType('');
     setSingleDate('');
     setFromDate('');
     setToDate('');
@@ -52,6 +58,12 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
   const userTxns = transactions.filter(t => {
     if (t.userId !== currentUser?.id) return false;
 
+    // Type filter
+    const currentSelectType = activeFilter.selectType;
+    if (currentSelectType === 'send' && t.type !== 'send') return false;
+    if (currentSelectType === 'deposit' && t.type !== 'deposit') return false;
+    if (currentSelectType === 'commission' && t.type !== 'charge') return false;
+
     // Mobile filter
     if (activeFilter.mobile) {
       const q = activeFilter.mobile.toLowerCase();
@@ -60,41 +72,71 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
       if (!matchMobile && !matchComment) return false;
     }
 
-    const txnDate = new Date(t.createdAt).toISOString().split('T')[0];
+    // Date filters (only when not only_number)
+    if (currentSelectType !== 'only_number') {
+      const txnDate = new Date(t.createdAt).toISOString().split('T')[0];
 
-    // Single date filter
-    if (activeFilter.singleDate && txnDate !== activeFilter.singleDate) {
-      return false;
-    }
-
-    // From date filter
-    if (activeFilter.fromDate && txnDate < activeFilter.fromDate) {
-      return false;
-    }
-
-    // To date filter
-    if (activeFilter.toDate && txnDate > activeFilter.toDate) {
-      return false;
+      if (activeFilter.singleDate && txnDate !== activeFilter.singleDate) {
+        return false;
+      }
+      if (activeFilter.fromDate && txnDate < activeFilter.fromDate) {
+        return false;
+      }
+      if (activeFilter.toDate && txnDate > activeFilter.toDate) {
+        return false;
+      }
     }
 
     return true;
   });
 
+  const handleDownloadPDF = () => {
+    if (!currentUser) return;
+    generateStatementPDF({
+      user: {
+        name: currentUser.name,
+        mobile: currentUser.mobile,
+        email: currentUser.email,
+        address: currentUser.address,
+        balance: currentUser.balance
+      },
+      transactions: userTxns,
+      filterInfo: {
+        type: selectType,
+        singleDate: activeFilter.singleDate,
+        fromDate: activeFilter.fromDate,
+        toDate: activeFilter.toDate,
+        mobile: activeFilter.mobile
+      }
+    });
+  };
+
+  const isFilterActive =
+    selectType !== 'all' ||
+    Boolean(activeFilter.singleDate || activeFilter.fromDate || activeFilter.toDate || activeFilter.mobile);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 max-w-md mx-auto shadow-xl">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
+      <div className="bg-white border-b border-slate-200 px-5 py-3.5 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <img
             src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200'}
             alt="User Avatar"
-            className="w-10 h-10 rounded-full object-cover border border-slate-300"
+            className="w-10 h-10 rounded-full object-cover border border-slate-300 shrink-0"
           />
-          <h1 className="text-xl font-bold text-blue-950">Statement</h1>
+          <div>
+            <h1 className="text-lg font-bold text-blue-950 leading-tight">Statement</h1>
+            <p className="text-xs font-bold text-slate-800 leading-tight">{currentUser?.name}</p>
+            <p className="text-[10px] text-slate-500 font-semibold flex items-center gap-0.5 leading-tight mt-0.5">
+              <MapPin className="w-3 h-3 text-blue-900 shrink-0" />
+              <span>{currentUser?.address || 'Dhaka, Bangladesh'}</span>
+            </p>
+          </div>
         </div>
         <button
           onClick={onOpenNotifications}
-          className="relative p-2 rounded-full hover:bg-slate-100 transition-colors"
+          className="relative p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
         >
           <Bell className="w-6 h-6 text-slate-700" />
           {unreadCount > 0 && (
@@ -108,86 +150,142 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
         {/* Filters Card */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 space-y-4">
           <form onSubmit={handleSearch} className="space-y-4">
-            {/* Single Date */}
+            {/* 1. Select Dropdown */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Single Date
+              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-blue-900" />
+                <span>Select Filter Category</span>
               </label>
-              <div className="relative">
+              <select
+                value={selectType}
+                onChange={e => {
+                  const val = e.target.value as '' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number';
+                  setSelectType(val);
+                }}
+                className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm font-bold text-slate-900 outline-none transition-all cursor-pointer"
+              >
+                <option value="">-- Select Filter Category --</option>
+                <option value="all">All</option>
+                <option value="send">Send</option>
+                <option value="deposit">Deposit</option>
+                <option value="commission">Commission</option>
+                <option value="only_number">Only Number</option>
+              </select>
+            </div>
+
+            {selectType !== '' && <hr className="border-slate-100" />}
+
+            {/* 2. Conditional Fields based on Select Dropdown */}
+            {selectType === '' ? null : selectType === 'only_number' ? (
+              /* Only Number Field */
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Mobile Number
+                </label>
                 <input
-                  type="date"
-                  value={singleDate}
-                  onChange={e => setSingleDate(e.target.value)}
-                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm text-slate-800 outline-none transition-all"
+                  type="text"
+                  value={searchMobile}
+                  onChange={e => setSearchMobile(e.target.value)}
+                  placeholder="Enter mobile number"
+                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm text-slate-900 font-medium placeholder-slate-400 outline-none transition-all"
+                  autoFocus
                 />
               </div>
-            </div>
-
-            <hr className="border-slate-100" />
-
-            {/* Date Range */}
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 mb-2">Date Range</h3>
-              <div className="grid grid-cols-2 gap-3">
+            ) : (
+              /* Date Fields Table */
+              <div className="space-y-4">
+                {/* Single Date */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    From Date
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Single Date
                   </label>
                   <input
                     type="date"
-                    value={fromDate}
-                    onChange={e => setFromDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none transition-all"
+                    value={singleDate}
+                    onChange={e => setSingleDate(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm text-slate-800 outline-none transition-all"
                   />
                 </div>
+
+                <hr className="border-slate-100" />
+
+                {/* Date Range */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    To Date
+                  <h3 className="text-xs font-bold text-slate-900 mb-2">Date Range</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        From Date
+                      </label>
+                      <input
+                        type="date"
+                        value={fromDate}
+                        onChange={e => setFromDate(e.target.value)}
+                        className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">
+                        To Date
+                      </label>
+                      <input
+                        type="date"
+                        value={toDate}
+                        onChange={e => setToDate(e.target.value)}
+                        className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                {/* Optional Mobile Search */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Mobile Number (Optional)
                   </label>
                   <input
-                    type="date"
-                    value={toDate}
-                    onChange={e => setToDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none transition-all"
+                    type="text"
+                    value={searchMobile}
+                    onChange={e => setSearchMobile(e.target.value)}
+                    placeholder="Enter mobile number"
+                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all"
                   />
                 </div>
               </div>
-            </div>
-
-            <hr className="border-slate-100" />
-
-            {/* Mobile Number Search */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Mobile Number
-              </label>
-              <input
-                type="text"
-                value={searchMobile}
-                onChange={e => setSearchMobile(e.target.value)}
-                placeholder="Enter mobile number"
-                className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-2.5 px-3.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all"
-              />
-            </div>
+            )}
 
             {/* Action Buttons */}
-            <div className="flex gap-2 pt-1">
-              <button
-                type="submit"
-                className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
-              >
-                <Search className="w-4 h-4" />
-                <span>Search</span>
-              </button>
-              {(activeFilter.singleDate || activeFilter.fromDate || activeFilter.toDate || activeFilter.mobile) && (
+            <div className="space-y-2 pt-1">
+              <div className="flex gap-2">
                 <button
-                  type="button"
-                  onClick={handleClearFilter}
-                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors"
+                  type="submit"
+                  className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-sm active:scale-98"
                 >
-                  Clear
+                  <Search className="w-4 h-4" />
+                  <span>Search</span>
                 </button>
-              )}
+                {isFilterActive && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilter}
+                    className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Download PDF Button */}
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer text-sm active:scale-98"
+              >
+                <Download className="w-4 h-4 text-emerald-200" />
+                <span>Download PDF Statement</span>
+              </button>
             </div>
           </form>
         </div>

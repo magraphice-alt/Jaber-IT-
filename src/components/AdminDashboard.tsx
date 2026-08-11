@@ -33,11 +33,13 @@ import {
   Trash2,
   Plus,
   AlertTriangle,
-  MinusCircle
+  MinusCircle,
+  Download
 } from 'lucide-react';
 import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
+import { generateStatementPDF } from '../utils/pdfGenerator';
 
 interface AdminDashboardProps {
   onOpenNotifications: () => void;
@@ -61,8 +63,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     createUserAccount,
     deleteUserAccount,
     manualAdjustUserBalance,
+    updateUserProfile,
     logout
   } = useApp();
+
+  const [editingUserProfileId, setEditingUserProfileId] = useState<string | null>(null);
+  const [adminEditName, setAdminEditName] = useState('');
+  const [adminEditMobile, setAdminEditMobile] = useState('');
+  const [adminEditAddress, setAdminEditAddress] = useState('');
+  const [adminProfileMsg, setAdminProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [inlineAdjustAmount, setInlineAdjustAmount] = useState('');
   const [inlineAdjustNote, setInlineAdjustNote] = useState('');
@@ -75,6 +84,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [historyTab, setHistoryTab] = useState<'pending' | 'approved_send' | 'approved_deposit' | 'charges'>('pending');
   const [userActivityFilter, setUserActivityFilter] = useState<'all' | 'send' | 'deposit' | 'charge'>('all');
+
+  // Directory selected user statement filter state
+  const [adminSelectType, setAdminSelectType] = useState<'' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number'>('');
+  const [adminSingleDate, setAdminSingleDate] = useState('');
+  const [adminFromDate, setAdminFromDate] = useState('');
+  const [adminToDate, setAdminToDate] = useState('');
+  const [adminSearchMobile, setAdminSearchMobile] = useState('');
+  const [adminActiveFilter, setAdminActiveFilter] = useState<{
+    selectType?: '' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number';
+    singleDate?: string;
+    fromDate?: string;
+    toDate?: string;
+    mobile?: string;
+  }>({});
 
   // Commission Rate Editing State
   const [isEditingRate, setIsEditingRate] = useState(false);
@@ -830,9 +853,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                 const userTxns = transactions.filter(t => t.userId === selectedUser.id);
                 const filteredUserTxns = userTxns.filter(t => {
-                  if (userActivityFilter === 'send') return t.type === 'send';
-                  if (userActivityFilter === 'deposit') return t.type === 'deposit';
-                  if (userActivityFilter === 'charge') return t.type === 'charge';
+                  const currentSelectType = adminActiveFilter.selectType || 'all';
+                  if (currentSelectType === 'send' && t.type !== 'send') return false;
+                  if (currentSelectType === 'deposit' && t.type !== 'deposit') return false;
+                  if (currentSelectType === 'commission' && t.type !== 'charge') return false;
+
+                  if (adminActiveFilter.mobile) {
+                    const q = adminActiveFilter.mobile.toLowerCase();
+                    const matchMobile = t.recipientMobile?.toLowerCase().includes(q);
+                    const matchComment = t.comment?.toLowerCase().includes(q);
+                    if (!matchMobile && !matchComment) return false;
+                  }
+
+                  if (currentSelectType !== 'only_number') {
+                    const txnDate = new Date(t.createdAt).toISOString().split('T')[0];
+                    if (adminActiveFilter.singleDate && txnDate !== adminActiveFilter.singleDate) return false;
+                    if (adminActiveFilter.fromDate && txnDate < adminActiveFilter.fromDate) return false;
+                    if (adminActiveFilter.toDate && txnDate > adminActiveFilter.toDate) return false;
+                  }
+
                   return true;
                 });
 
@@ -885,23 +924,134 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                     {/* Selected User Hero Summary Card */}
                     <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         <img
                           src={selectedUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200'}
                           alt={selectedUser.name}
-                          className="w-12 h-12 rounded-full object-cover border-2 border-blue-900"
+                          className="w-12 h-12 rounded-full object-cover border-2 border-blue-900 shrink-0"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h2 className="text-base font-bold text-slate-900 truncate">{selectedUser.name}</h2>
-                            <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-900 px-2 py-0.5 rounded">
-                              {selectedUser.role}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-900 px-2 py-0.5 rounded">
+                                {selectedUser.role}
+                              </span>
+                              {editingUserProfileId !== selectedUser.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingUserProfileId(selectedUser.id);
+                                    setAdminEditName(selectedUser.name);
+                                    setAdminEditMobile(selectedUser.mobile || '');
+                                    setAdminEditAddress(selectedUser.address || '');
+                                    setAdminProfileMsg(null);
+                                  }}
+                                  className="p-1 rounded-lg text-blue-900 hover:bg-blue-50 border border-blue-200 transition-colors cursor-pointer text-xs font-bold flex items-center gap-1"
+                                  title="Edit User Profile"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Edit Profile</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-slate-500 truncate">{selectedUser.email}</p>
-                          <p className="text-[11px] text-slate-400 font-mono mt-0.5">{selectedUser.mobile}</p>
+                          <p className="text-[11px] text-slate-400 font-mono mt-0.5">{selectedUser.mobile || 'No mobile'}</p>
                         </div>
                       </div>
+
+                      {/* Admin Profile Edit Inline Form */}
+                      {editingUserProfileId === selectedUser.id && (
+                        <div className="bg-blue-50/80 p-3.5 rounded-xl border border-blue-200 space-y-3 mt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-blue-950 uppercase tracking-wider">
+                              Admin: Edit User Profile
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setEditingUserProfileId(null)}
+                              className="text-slate-400 hover:text-slate-700 p-1 rounded cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {adminProfileMsg && (
+                            <div
+                              className={`p-2 rounded-lg text-xs font-semibold ${
+                                adminProfileMsg.type === 'success'
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                  : 'bg-rose-100 text-rose-900 border border-rose-300'
+                              }`}
+                            >
+                              {adminProfileMsg.text}
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Full Name *</label>
+                              <input
+                                type="text"
+                                value={adminEditName}
+                                onChange={e => setAdminEditName(e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-blue-900"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Mobile Number *</label>
+                              <input
+                                type="text"
+                                value={adminEditMobile}
+                                onChange={e => setAdminEditMobile(e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 outline-none focus:border-blue-900"
+                                required
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Address</label>
+                              <input
+                                type="text"
+                                value={adminEditAddress}
+                                onChange={e => setAdminEditAddress(e.target.value)}
+                                placeholder="e.g. Dhaka, Bangladesh"
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-blue-900"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const res = updateUserProfile(
+                                  { name: adminEditName.trim(), mobile: adminEditMobile.trim(), address: adminEditAddress.trim() },
+                                  selectedUser.id
+                                );
+                                if (res.success) {
+                                  setAdminProfileMsg({ type: 'success', text: 'User profile updated!' });
+                                  setTimeout(() => setEditingUserProfileId(null), 1000);
+                                } else {
+                                  setAdminProfileMsg({ type: 'error', text: res.message });
+                                }
+                              }}
+                              className="bg-blue-900 hover:bg-blue-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Save Profile</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingUserProfileId(null)}
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-lg text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* User Stats Grid */}
                       {selectedUser.role !== 'admin' && (
@@ -1053,57 +1203,172 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                       </div>
                     )}
 
-                    {/* Filter Bar */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                          <Clock className="w-4 h-4 text-blue-900" />
-                          Activities & Financial History ({filteredUserTxns.length})
+                    {/* Filter Card for Selected User Statement */}
+                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wider">
+                          <Filter className="w-4 h-4 text-blue-900" />
+                          <span>User Statement Filtering ({filteredUserTxns.length})</span>
                         </h3>
                       </div>
 
-                      <div className="flex bg-slate-200 p-1 rounded-xl text-xs font-semibold">
-                        <button
-                          onClick={() => setUserActivityFilter('all')}
-                          className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-                            userActivityFilter === 'all'
-                              ? 'bg-white text-slate-900 shadow-xs font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          All ({userTxns.length})
-                        </button>
-                        <button
-                          onClick={() => setUserActivityFilter('send')}
-                          className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-                            userActivityFilter === 'send'
-                              ? 'bg-white text-slate-900 shadow-xs font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Send ({userTxns.filter(t => t.type === 'send').length})
-                        </button>
-                        <button
-                          onClick={() => setUserActivityFilter('deposit')}
-                          className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-                            userActivityFilter === 'deposit'
-                              ? 'bg-white text-slate-900 shadow-xs font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Deposits ({userTxns.filter(t => t.type === 'deposit').length})
-                        </button>
-                        <button
-                          onClick={() => setUserActivityFilter('charge')}
-                          className={`flex-1 py-1.5 rounded-lg text-center transition-all ${
-                            userActivityFilter === 'charge'
-                              ? 'bg-white text-slate-900 shadow-xs font-bold'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          Charges ({userTxns.filter(t => t.type === 'charge').length})
-                        </button>
-                      </div>
+                      <form
+                        onSubmit={e => {
+                          e.preventDefault();
+                          setAdminActiveFilter({
+                            selectType: adminSelectType,
+                            singleDate: adminSelectType !== 'only_number' ? (adminSingleDate || undefined) : undefined,
+                            fromDate: adminSelectType !== 'only_number' ? (adminFromDate || undefined) : undefined,
+                            toDate: adminSelectType !== 'only_number' ? (adminToDate || undefined) : undefined,
+                            mobile: adminSearchMobile.trim() || undefined
+                          });
+                        }}
+                        className="space-y-3"
+                      >
+                        {/* 1. Select Dropdown */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Select Filter Category
+                          </label>
+                          <select
+                            value={adminSelectType}
+                            onChange={e => {
+                              const val = e.target.value as '' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number';
+                              setAdminSelectType(val);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-lg p-2 text-xs font-bold text-slate-900 outline-none transition-all cursor-pointer"
+                          >
+                            <option value="">-- Select Filter Category --</option>
+                            <option value="all">All</option>
+                            <option value="send">Send</option>
+                            <option value="deposit">Deposit</option>
+                            <option value="commission">Commission</option>
+                            <option value="only_number">Only Number</option>
+                          </select>
+                        </div>
+
+                        {/* 2. Conditional Fields */}
+                        {adminSelectType === '' ? null : adminSelectType === 'only_number' ? (
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              Mobile Number
+                            </label>
+                            <input
+                              type="text"
+                              value={adminSearchMobile}
+                              onChange={e => setAdminSearchMobile(e.target.value)}
+                              placeholder="Enter mobile number"
+                              className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-lg p-2 text-xs text-slate-900 font-medium placeholder-slate-400 outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 pt-1">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Single Date
+                              </label>
+                              <input
+                                type="date"
+                                value={adminSingleDate}
+                                onChange={e => setAdminSingleDate(e.target.value)}
+                                className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-lg p-2 text-xs text-slate-800 outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-900 mb-1">Date Range</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="block text-[10px] text-slate-500 font-medium mb-0.5">From Date</span>
+                                  <input
+                                    type="date"
+                                    value={adminFromDate}
+                                    onChange={e => setAdminFromDate(e.target.value)}
+                                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-lg p-1.5 text-xs text-slate-800 outline-none"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-slate-500 font-medium mb-0.5">To Date</span>
+                                  <input
+                                    type="date"
+                                    value={adminToDate}
+                                    onChange={e => setAdminToDate(e.target.value)}
+                                    className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-lg p-1.5 text-xs text-slate-800 outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                Mobile Number (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={adminSearchMobile}
+                                onChange={e => setAdminSearchMobile(e.target.value)}
+                                placeholder="Enter mobile number"
+                                className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-lg p-2 text-xs text-slate-900 placeholder-slate-400 outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Buttons */}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="submit"
+                            className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-2 px-3 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <Search className="w-3.5 h-3.5" />
+                            <span>Search</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              generateStatementPDF({
+                                user: {
+                                  name: selectedUser.name,
+                                  mobile: selectedUser.mobile,
+                                  email: selectedUser.email,
+                                  address: selectedUser.address,
+                                  balance: selectedUser.balance
+                                },
+                                transactions: filteredUserTxns,
+                                filterInfo: {
+                                  type: adminSelectType,
+                                  singleDate: adminActiveFilter.singleDate,
+                                  fromDate: adminActiveFilter.fromDate,
+                                  toDate: adminActiveFilter.toDate,
+                                  mobile: adminActiveFilter.mobile
+                                }
+                              });
+                            }}
+                            className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-3 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-200" />
+                            <span>Download PDF</span>
+                          </button>
+
+                          {(Boolean(adminSelectType) || adminActiveFilter.singleDate || adminActiveFilter.fromDate || adminActiveFilter.toDate || adminActiveFilter.mobile) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminSelectType('');
+                                setAdminSingleDate('');
+                                setAdminFromDate('');
+                                setAdminToDate('');
+                                setAdminSearchMobile('');
+                                setAdminActiveFilter({});
+                              }}
+                              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </form>
                     </div>
 
                     {/* Activity List */}

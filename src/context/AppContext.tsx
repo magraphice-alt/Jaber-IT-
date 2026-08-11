@@ -23,6 +23,8 @@ interface AppContextType {
   deleteUserAccount: (userId: string) => { success: boolean; message?: string };
   chargeUserBalance: (userId: string, chargeAmount: number, reason?: string) => { success: boolean; message: string };
   manualAdjustUserBalance: (userId: string, action: 'credit' | 'debit', amount: number, note?: string) => { success: boolean; message: string };
+  updateUserProfile: (data: { name?: string; mobile?: string; address?: string; avatarUrl?: string }, targetUserId?: string) => { success: boolean; message: string };
+  changeUserPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
 }
@@ -531,6 +533,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const updateUserProfile = (
+    data: { name?: string; mobile?: string; address?: string; avatarUrl?: string },
+    targetUserId?: string
+  ): { success: boolean; message: string } => {
+    const userIdToUpdate = targetUserId || currentUser?.id;
+    if (!userIdToUpdate) return { success: false, message: 'No user specified.' };
+
+    const targetUser = users.find(u => u.id === userIdToUpdate) || (currentUser?.id === userIdToUpdate ? currentUser : null);
+    if (!targetUser) return { success: false, message: 'User not found.' };
+
+    const newName = data.name !== undefined ? data.name.trim() : targetUser.name;
+    const newMobile = data.mobile !== undefined ? data.mobile.trim() : targetUser.mobile;
+    const newAddress = data.address !== undefined ? data.address.trim() : targetUser.address;
+    const newAvatar = data.avatarUrl !== undefined ? data.avatarUrl : targetUser.avatarUrl;
+
+    if (!newName) {
+      return { success: false, message: 'Full Name cannot be empty.' };
+    }
+
+    const updatedUser: User = {
+      ...targetUser,
+      name: newName,
+      mobile: newMobile,
+      address: newAddress,
+      avatarUrl: newAvatar
+    };
+
+    setUsers(prev => prev.map(u => (u.id === userIdToUpdate ? updatedUser : u)));
+    if (currentUser && currentUser.id === userIdToUpdate) {
+      setCurrentUser(updatedUser);
+    }
+    setDoc(doc(db, 'users', userIdToUpdate), cleanForFirestore(updatedUser)).catch(() => {});
+
+    return { success: true, message: 'Profile updated successfully!' };
+  };
+
+  const changeUserPassword = (oldPass: string, newPass: string): { success: boolean; message: string } => {
+    if (!currentUser) return { success: false, message: 'No user logged in.' };
+    const userEmailKey = currentUser.email.toLowerCase();
+    const storedPass = passwords[userEmailKey] || '123456';
+
+    if (oldPass !== storedPass) {
+      return { success: false, message: 'Current password is incorrect.' };
+    }
+
+    if (!newPass || newPass.trim().length < 4) {
+      return { success: false, message: 'New password must be at least 4 characters long.' };
+    }
+
+    const newPasswords = { ...passwords, [userEmailKey]: newPass.trim() };
+    setPasswords(newPasswords);
+    safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, newPasswords);
+
+    return { success: true, message: 'Password changed successfully!' };
+  };
+
   const rejectTransaction = (txnId: string, reason?: string) => {
     const txn = transactions.find(t => t.id === txnId);
     if (!txn || txn.status !== 'pending') return;
@@ -718,6 +776,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteUserAccount,
         chargeUserBalance,
         manualAdjustUserBalance,
+        updateUserProfile,
+        changeUserPassword,
         markNotificationRead,
         clearNotifications
       }}
