@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import JsBarcode from 'jsbarcode';
+import { toJpeg } from 'html-to-image';
 import { Transaction } from '../types';
 import { useApp } from '../context/AppContext';
 import {
@@ -12,7 +14,10 @@ import {
   Check,
   FileText,
   MessageCircle,
-  MapPin
+  MapPin,
+  Barcode,
+  ImageDown,
+  Loader2
 } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -23,15 +28,39 @@ interface ReceiptModalProps {
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose }) => {
   const { users, currentUser } = useApp();
   const [copiedText, setCopiedText] = useState(false);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const [photoSaved, setPhotoSaved] = useState(false);
+  const barcodeRef = useRef<SVGSVGElement | null>(null);
+
+  // Resolve target user name & address for receipt header
+  const userObj = users.find(u => u.id === transaction?.userId) || (currentUser?.id === transaction?.userId ? currentUser : null);
+  const receiptUserName = transaction?.userName || userObj?.name || (currentUser?.id === transaction?.userId ? currentUser?.name : '') || 'Customer';
+  const receiptUserAddress = userObj?.address || (currentUser?.id === transaction?.userId ? currentUser?.address : '') || 'Dhaka, Bangladesh';
+
+  useEffect(() => {
+    if (transaction?.id && barcodeRef.current) {
+      try {
+        JsBarcode(barcodeRef.current, transaction.id, {
+          format: 'CODE128',
+          width: 1.7,
+          height: 48,
+          displayValue: true,
+          font: 'monospace',
+          fontSize: 12,
+          textMargin: 3,
+          margin: 6,
+          lineColor: '#0f172a',
+          background: '#ffffff'
+        });
+      } catch (err) {
+        console.error('Failed to generate Barcode:', err);
+      }
+    }
+  }, [transaction?.id]);
 
   if (!transaction) return null;
 
-  // Resolve target user name & address for receipt header
-  const userObj = users.find(u => u.id === transaction.userId) || (currentUser?.id === transaction.userId ? currentUser : null);
-  const receiptUserName = transaction.userName || userObj?.name || (currentUser?.id === transaction.userId ? currentUser?.name : '') || 'Customer';
-  const receiptUserAddress = userObj?.address || (currentUser?.id === transaction.userId ? currentUser?.address : '') || 'Dhaka, Bangladesh';
-
-  const isApproved = transaction.status === 'approved';
   const receiptDate = new Date(transaction.approvedAt || transaction.createdAt).toLocaleString('en-BD', {
     dateStyle: 'medium',
     timeStyle: 'short'
@@ -54,10 +83,56 @@ ${transaction.comment ? `*Comment / Note:* ${transaction.comment}\n` : ''}──
 Thank you - Masud Telecom
   `.trim();
 
-  const handleWhatsAppShare = () => {
-    const encodedText = encodeURIComponent(formattedMessage);
-    const waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  const handleWhatsAppShare = async () => {
+    const receiptElem = document.getElementById('printable-receipt');
+    setSharingWhatsApp(true);
+
+    try {
+      if (receiptElem) {
+        const dataUrl = await toJpeg(receiptElem, {
+          quality: 0.95,
+          backgroundColor: '#ffffff',
+          pixelRatio: 2.5,
+          filter: (node) => !(node as HTMLElement)?.classList?.contains('no-print')
+        });
+
+        // Convert base64 to Blob & File
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `Receipt-${transaction.id}.jpg`, { type: 'image/jpeg' });
+
+        // Check if Web Share API with files is supported (works natively on Mobile Android/iOS to WhatsApp)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Receipt #${transaction.id} - Masud Telecom`,
+            text: `Money Transfer Receipt #${transaction.id}\nMasud Telecom\nAmount: ৳${transaction.amount.toLocaleString('en-BD')}`
+          });
+          setSharingWhatsApp(false);
+          return;
+        }
+
+        // Desktop / unsupported fallback: Auto-download the photo & open WhatsApp with details
+        const fileName = `Receipt-${transaction.id}.jpg`;
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      const encodedText = encodeURIComponent(formattedMessage);
+      const waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.error('Error sharing receipt photo to WhatsApp:', err);
+      const encodedText = encodeURIComponent(formattedMessage);
+      const waUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    } finally {
+      setSharingWhatsApp(false);
+    }
   };
 
   const handleEmailShare = () => {
@@ -95,6 +170,41 @@ Thank you - Masud Telecom
     } catch {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2000);
+    }
+  };
+
+  const handleSavePhoto = async () => {
+    const receiptElem = document.getElementById('printable-receipt');
+    if (!receiptElem) return;
+
+    try {
+      setSavingPhoto(true);
+      const dataUrl = await toJpeg(receiptElem, {
+        quality: 0.95,
+        backgroundColor: '#ffffff',
+        pixelRatio: 2.5,
+        filter: (node) => {
+          if ((node as HTMLElement)?.classList?.contains('no-print')) {
+            return false;
+          }
+          return true;
+        }
+      });
+
+      const fileName = `Receipt-${transaction.id}.jpg`;
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setPhotoSaved(true);
+      setTimeout(() => setPhotoSaved(false), 2500);
+    } catch (err) {
+      console.error('Failed to save receipt image:', err);
+    } finally {
+      setSavingPhoto(false);
     }
   };
 
@@ -230,42 +340,28 @@ Thank you - Masud Telecom
               <p className="text-[10px] text-slate-400">Masud Telecom &bull; Helpline: +880 1700-000000</p>
             </div>
 
-            {/* Approved Stamp Badge */}
-            {isApproved && (
-              <div className="absolute top-4 right-4 rotate-[12deg] pointer-events-none opacity-85">
-                <div className="border-2 border-emerald-600 text-emerald-700 px-2 py-0.5 rounded font-black text-[10px] uppercase tracking-widest shadow-2xs">
-                  APPROVED
-                </div>
-              </div>
-            )}
-
             {/* Txn ID & Date Banner */}
             <div className="bg-slate-100 p-2.5 rounded-xl flex items-center justify-between text-xs font-mono">
               <div>
-                <span className="text-[10px] text-slate-500 block uppercase font-sans">Receipt No / Txn ID</span>
+                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Receipt No / Txn ID</span>
                 <strong className="text-slate-900 font-extrabold">{transaction.id}</strong>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-slate-500 block uppercase font-sans">Date & Time</span>
+                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Date & Time</span>
                 <strong className="text-slate-700 font-bold text-[11px]">{receiptDate}</strong>
               </div>
             </div>
 
             {/* Main Table Details */}
             <div className="space-y-2 text-xs divide-y divide-slate-100">
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500 font-medium">User / Customer Name:</span>
-                <strong className="text-slate-900 font-bold">{receiptUserName}</strong>
-              </div>
-
-              <div className="flex justify-between py-1">
+              <div className="flex justify-between py-1 items-center">
                 <span className="text-slate-500 font-medium">Transfer Type:</span>
                 <span className="font-bold uppercase text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px]">
                   {transaction.type}
                 </span>
               </div>
 
-              <div className="flex justify-between py-1">
+              <div className="flex justify-between py-1 items-center">
                 <span className="text-slate-500 font-medium">Method / Gateway:</span>
                 <strong className="text-slate-900 font-bold">{transaction.method}</strong>
               </div>
@@ -290,12 +386,12 @@ Thank you - Masud Telecom
                 </div>
               )}
 
-              <div className="flex justify-between py-2 text-sm border-t-2 border-slate-800 font-extrabold">
+              <div className="flex justify-between py-2 text-sm border-t-2 border-slate-800 font-extrabold items-center">
                 <span className="text-slate-900">Total Amount:</span>
-                <span className="font-mono text-base text-blue-950">৳{transaction.amount.toLocaleString('en-BD')}</span>
+                <span className="font-mono text-base text-blue-950 font-black">৳{transaction.amount.toLocaleString('en-BD')}</span>
               </div>
 
-              <div className="flex justify-between py-1 text-xs">
+              <div className="flex justify-between py-1 text-xs items-center">
                 <span className="text-slate-500 font-medium">Status:</span>
                 <span
                   className={`font-bold capitalize flex items-center gap-1 ${
@@ -328,75 +424,106 @@ Thank you - Masud Telecom
 
             {/* Thank you note */}
             <div className="pt-2 text-center">
-              <span className="text-xs font-bold text-slate-700 font-sans tracking-wide">
+              <span className="text-xs font-bold text-slate-700 font-sans tracking-wide block">
                 Thank you
               </span>
             </div>
 
-            {/* Mock Barcode Footer */}
-            <div className="pt-3 border-t border-dashed border-slate-300 text-center space-y-1">
-              <div className="font-mono text-[10px] tracking-widest text-slate-400 font-bold">
-                ||| ||||| ||| |||| |||||| ||| |||||
+            {/* Centered Barcode generated from Receipt No / Txn ID */}
+            <div className="pt-1 flex flex-col items-center justify-center">
+              <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs inline-flex flex-col items-center justify-center max-w-full">
+                <svg ref={barcodeRef} className="max-w-full h-auto" />
               </div>
+            </div>
+
+            {/* Receipt Footer */}
+            <div className="pt-1 text-center space-y-1">
               <p className="text-[10px] text-slate-400 font-medium italic">
-                Computer-generated official money receipt. Verified by Masud Telecom Admin System.
+                Computer-generated official money receipt &bull; Masud Telecom
               </p>
             </div>
           </div>
         </div>
 
-        {/* BOTTOM ACTION BUTTONS (WhatsApp, Email, Print PDF) */}
-        <div className="bg-white p-4 border-t border-slate-200 space-y-2 no-print">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider text-center">
-            Send Receipt via PDF / Paper / Messaging:
+        {/* BOTTOM ACTION BUTTONS - Single line, 8px font size */}
+        <div className="bg-white px-2 py-2 border-t border-slate-200 no-print">
+          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-center mb-1.5">
+            Send Receipt via Photo / PDF / Messaging:
           </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {/* WhatsApp Share Button */}
+          <div className="grid grid-cols-5 gap-1">
+            {/* Save Photo (JPG) */}
+            <button
+              type="button"
+              onClick={handleSavePhoto}
+              disabled={savingPhoto || sharingWhatsApp}
+              title="Save JPG photo to mobile gallery"
+              className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white py-1.5 px-0.5 rounded-lg text-[8px] font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all shadow-xs cursor-pointer disabled:opacity-60"
+            >
+              {savingPhoto ? (
+                <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+              ) : photoSaved ? (
+                <Check className="w-3 h-3 text-white shrink-0" />
+              ) : (
+                <ImageDown className="w-3 h-3 shrink-0" />
+              )}
+              <span className="whitespace-nowrap leading-none">{photoSaved ? 'Saved!' : 'Save Photo'}</span>
+            </button>
+
+            {/* WhatsApp */}
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              disabled={sharingWhatsApp || savingPhoto}
+              title="Share receipt as photo on WhatsApp"
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white py-1.5 px-0.5 rounded-lg text-[8px] font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all shadow-xs cursor-pointer disabled:opacity-60"
             >
-              <MessageCircle className="w-4 h-4" />
-              <span>WhatsApp</span>
+              {sharingWhatsApp ? (
+                <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+              ) : (
+                <MessageCircle className="w-3 h-3 shrink-0" />
+              )}
+              <span className="whitespace-nowrap leading-none">WhatsApp</span>
             </button>
 
-            {/* Email Share Button */}
+            {/* Email */}
             <button
               type="button"
               onClick={handleEmailShare}
-              className="bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Send via Email"
+              className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-1.5 px-0.5 rounded-lg text-[8px] font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all shadow-xs cursor-pointer"
             >
-              <Mail className="w-4 h-4" />
-              <span>Email</span>
+              <Mail className="w-3 h-3 shrink-0" />
+              <span className="whitespace-nowrap leading-none">Email</span>
             </button>
 
-            {/* Print / Save PDF Button */}
+            {/* Print / Save PDF */}
             <button
               type="button"
               onClick={handlePrint}
-              className="bg-slate-900 hover:bg-slate-800 text-white py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Print or Save as PDF"
+              className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white py-1.5 px-0.5 rounded-lg text-[8px] font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all shadow-xs cursor-pointer"
             >
-              <Printer className="w-4 h-4 text-blue-400" />
-              <span>Print / PDF</span>
+              <Printer className="w-3 h-3 text-blue-400 shrink-0" />
+              <span className="whitespace-nowrap leading-none">Print / PDF</span>
             </button>
 
-            {/* Copy Text Summary */}
+            {/* Copy Text */}
             <button
               type="button"
               onClick={handleCopyReceipt}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 py-2.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              title="Copy receipt text summary"
+              className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 border border-slate-300 py-1.5 px-0.5 rounded-lg text-[8px] font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all cursor-pointer"
             >
               {copiedText ? (
                 <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span className="text-emerald-700">Copied!</span>
+                  <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span className="whitespace-nowrap text-emerald-700 leading-none">Copied!</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4 text-slate-600" />
-                  <span>Copy</span>
+                  <Copy className="w-3 h-3 text-slate-600 shrink-0" />
+                  <span className="whitespace-nowrap leading-none">Copy</span>
                 </>
               )}
             </button>
