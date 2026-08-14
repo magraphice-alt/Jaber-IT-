@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Transaction, TransferMethod } from '../types';
 import { X, Clock, Lock, AlertCircle, Edit3, Trash2, Send, CheckCircle2, MessageCircle, Phone } from 'lucide-react';
+import { amountToWords } from '../utils/numberToWords';
 
 interface EditSendModalProps {
   transaction: Transaction;
@@ -51,11 +52,13 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
       return;
     }
 
-    const numAmt = parseFloat(amount);
-    if (!mobileNumber.trim()) {
-      setErrorMsg('Please enter a valid target mobile number.');
+    const cleanMobile = mobileNumber.replace(/\D/g, '').slice(0, 11);
+    if (cleanMobile.length !== 11) {
+      setErrorMsg(`Target Mobile Number must be exactly 11 digits (Current: ${cleanMobile.length}/11).`);
       return;
     }
+
+    const numAmt = parseFloat(amount);
     if (isNaN(numAmt) || numAmt <= 0) {
       setErrorMsg('Please enter a valid send amount.');
       return;
@@ -67,7 +70,7 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
 
     setIsSubmitting(true);
     const res = editPendingSendRequest(transaction.id, {
-      recipientMobile: mobileNumber.trim(),
+      recipientMobile: cleanMobile,
       amount: numAmt,
       method: method as TransferMethod,
       comment: comment.trim()
@@ -199,17 +202,26 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
 
           {/* Recipient Mobile */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Target Mobile Number
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                Target Mobile Number
+              </label>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                mobileNumber.replace(/\D/g, '').length === 11
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {mobileNumber.replace(/\D/g, '').length}/11 Digits
+              </span>
+            </div>
             <input
               type="tel"
-              inputMode="tel"
-              autoComplete="tel"
+              inputMode="numeric"
+              maxLength={11}
               disabled={isExpired}
               value={mobileNumber}
-              onChange={e => setMobileNumber(e.target.value)}
-              placeholder="e.g. 01726079695"
+              onChange={e => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
+              placeholder="01XXXXXXXXX (11 digits)"
               className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl p-3 text-sm font-mono font-bold text-slate-900 outline-none transition-all disabled:opacity-60 disabled:bg-slate-100"
             />
           </div>
@@ -229,6 +241,18 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
               placeholder="Enter amount"
               className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl p-3 text-sm font-bold text-slate-900 outline-none transition-all disabled:opacity-60 disabled:bg-slate-100"
             />
+
+            {/* Dynamic Amount in Words */}
+            {amountToWords(amount) && (
+              <div className="mt-1.5 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-1.5">
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-800 bg-blue-100 px-1 py-0.5 rounded shrink-0">
+                  In Words:
+                </span>
+                <span className="text-xs font-bold text-blue-950 leading-tight">
+                  {amountToWords(amount)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Method */}

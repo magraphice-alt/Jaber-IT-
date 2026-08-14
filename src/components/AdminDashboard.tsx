@@ -40,6 +40,7 @@ import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
 import { generateStatementPDF } from '../utils/pdfGenerator';
+import { amountToWords } from '../utils/numberToWords';
 
 interface AdminDashboardProps {
   onOpenNotifications: () => void;
@@ -462,9 +463,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                                 Type: <strong className="uppercase">{t.type}</strong> via {t.method}
                               </span>
                             </div>
-                            <span className="text-sm font-extrabold text-blue-950 font-mono">
-                              ৳{t.amount.toLocaleString('en-BD')}
-                            </span>
+                            <div>
+                              <span className="text-sm font-extrabold text-blue-950 font-mono block text-right">
+                                ৳{t.amount.toLocaleString('en-BD')}
+                              </span>
+                              <span className="text-[10px] font-semibold text-blue-900/80 block text-right">
+                                {t.amountInWords || amountToWords(t.amount)}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="text-xs text-slate-600">
@@ -1820,7 +1826,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                     )}
                     <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200 text-slate-900 font-extrabold">
                       <span>Amount:</span>
-                      <span className="text-base font-mono text-emerald-800">৳{txnToApprove.amount.toLocaleString('en-BD')}</span>
+                      <div className="text-right">
+                        <span className="text-base font-mono text-emerald-800 block">৳{txnToApprove.amount.toLocaleString('en-BD')}</span>
+                        <span className="text-[10px] font-semibold text-emerald-700 block">
+                          {txnToApprove.amountInWords || amountToWords(txnToApprove.amount)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 

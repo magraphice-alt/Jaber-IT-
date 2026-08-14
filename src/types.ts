@@ -34,6 +34,7 @@ export interface Transaction {
   attachmentName?: string;
   status: TransactionStatus;
   commissionEarned: number; // Commission calculated on send or deposit
+  amountInWords?: string;
   createdAt: string;
   approvedAt?: string;
   adminPin?: string;

@@ -3,6 +3,7 @@ import { User, Transaction, NotificationItem, SystemSettings, TransferMethod } f
 import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
 import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { amountToWords } from '../utils/numberToWords';
 
 interface AppContextType {
   currentUser: User | null;
@@ -228,6 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Calculate commission based on formula: (amount / 1000) * 7.5
     const commission = (amount / 1000) * 7.5;
+    const inWords = amountToWords(amount);
 
     const newTxn: Transaction = {
       id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -237,6 +239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'send',
       recipientMobile,
       amount,
+      amountInWords: inWords,
       method,
       comment: comment || `Transfer to ${recipientMobile}`,
       status: 'pending',
@@ -252,7 +255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `notif-${Date.now()}`,
       userId: 'admin',
       title: 'New Send Request',
-      message: `${currentUser.name} requested a Send transfer of ৳${amount.toLocaleString('en-BD')} to ${recipientMobile}.`,
+      message: `${currentUser.name} requested a Send transfer of ৳${amount.toLocaleString('en-BD')} (${inWords}) to ${recipientMobile}.`,
       timestamp: 'Just now',
       read: false,
       type: 'alert'
@@ -275,6 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isNaN(amount) || amount <= 0) return false;
 
       const commission = 0;
+      const inWords = amountToWords(amount);
 
       const newTxn: Transaction = {
         id: `TXN-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -283,6 +287,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userEmail: currentUser.email,
         type: 'deposit',
         amount,
+        amountInWords: inWords,
         method,
         comment: comment || 'Deposit Request',
         status: 'pending',
@@ -303,7 +308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `notif-${Date.now()}`,
         userId: 'admin',
         title: 'New Deposit Request',
-        message: `${currentUser.name} submitted a Deposit Request of ৳${amount.toLocaleString('en-BD')} via ${method}.`,
+        message: `${currentUser.name} submitted a Deposit Request of ৳${amount.toLocaleString('en-BD')} (${inWords}) via ${method}.`,
         timestamp: 'Just now',
         read: false,
         type: 'alert'
@@ -635,11 +640,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newAmount = data.amount !== undefined ? data.amount : txn.amount;
     const newCommission = (newAmount / 1000) * 7.5;
+    const inWords = amountToWords(newAmount);
 
     const updatedTxn: Transaction = {
       ...txn,
       recipientMobile: data.recipientMobile !== undefined ? data.recipientMobile : txn.recipientMobile,
       amount: newAmount,
+      amountInWords: inWords,
       method: data.method !== undefined ? data.method : txn.method,
       comment: data.comment !== undefined ? data.comment : txn.comment,
       commissionEarned: newCommission

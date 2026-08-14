@@ -3,6 +3,7 @@ import JsBarcode from 'jsbarcode';
 import { toJpeg } from 'html-to-image';
 import { Transaction } from '../types';
 import { useApp } from '../context/AppContext';
+import { amountToWords } from '../utils/numberToWords';
 import {
   X,
   Printer,
@@ -78,7 +79,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 *Method:* ${transaction.method}
 ${transaction.recipientMobile ? `*Target Number:* ${transaction.recipientMobile}\n` : ''}${
     transaction.adminPin ? `*Admin Security PIN:* ${transaction.adminPin}\n` : ''
-}*Amount:* ৳${transaction.amount.toLocaleString('en-BD')}
+}*Amount:* ৳${transaction.amount.toLocaleString('en-BD')} (${transaction.amountInWords || amountToWords(transaction.amount)})
 ${transaction.comment ? `*Comment / Note:* ${transaction.comment}\n` : ''}───────────────────────────────
 Thank you - Masud Telecom
   `.trim();
@@ -389,6 +390,13 @@ Thank you - Masud Telecom
               <div className="flex justify-between py-1.5 text-[10px] border-t-2 border-slate-800 font-bold items-center">
                 <span className="text-slate-900 font-bold text-[10px]">Total Amount:</span>
                 <span className="font-mono text-[10px] text-blue-950 font-bold">৳{transaction.amount.toLocaleString('en-BD')}</span>
+              </div>
+
+              <div className="flex justify-between py-1 text-[8px] items-center bg-slate-50/80 -mx-1 px-1 rounded">
+                <span className="text-slate-500 font-bold text-[8px]">In Words:</span>
+                <span className="font-bold text-slate-800 text-[8px] text-right">
+                  {transaction.amountInWords || amountToWords(transaction.amount)}
+                </span>
               </div>
 
               <div className="flex justify-between py-1 text-[8px] items-center">

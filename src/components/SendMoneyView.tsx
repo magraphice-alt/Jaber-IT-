@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Bell, ShieldCheck, Phone, CheckCircle, Send as SendIcon } from 'lucide-react';
+import { ArrowLeft, Bell, ShieldCheck, Phone, CheckCircle, Send as SendIcon, CheckCircle2, AlertCircle } from 'lucide-react';
 import { TransferMethod } from '../types';
+import { amountToWords } from '../utils/numberToWords';
 
 interface SendMoneyViewProps {
   onBack: () => void;
@@ -23,16 +24,27 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
     n => !n.read && (n.userId === currentUser?.id || n.userId === 'all')
   ).length;
 
+  const inWords = amountToWords(amount);
+
+  const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only accept numeric digits, maximum 11 digits
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+    setMobileNumber(digitsOnly);
+    if (errorMsg) setErrorMsg(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg(null);
     setErrorMsg(null);
 
-    const numAmt = parseFloat(amount);
-    if (!mobileNumber.trim()) {
-      setErrorMsg('Please enter a valid recipient mobile number.');
+    const cleanMobile = mobileNumber.trim();
+    if (cleanMobile.length !== 11) {
+      setErrorMsg(`Recipient Mobile Number must be exactly 11 digits (Current: ${cleanMobile.length}/11). Please enter a valid 11-digit number (e.g. 017XXXXXXXX).`);
       return;
     }
+
+    const numAmt = parseFloat(amount);
     if (isNaN(numAmt) || numAmt <= 0) {
       setErrorMsg('Please enter a valid transfer amount.');
       return;
@@ -46,14 +58,14 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
 
     try {
       const ok = await createSendRequest(
-        mobileNumber.trim(),
+        cleanMobile,
         numAmt,
         method as TransferMethod,
         comment.trim()
       );
 
       if (ok) {
-        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} to ${mobileNumber} submitted to Admin for approval.`);
+        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} (${inWords}) to ${cleanMobile} submitted to Admin for approval.`);
         setMobileNumber('');
         setAmount('');
         setMethod('');
@@ -132,24 +144,60 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* MOBILE NUMBER */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Mobile Number
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Mobile Number
+                </label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-all ${
+                  mobileNumber.length === 11
+                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                    : mobileNumber.length > 0
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                    : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {mobileNumber.length === 11 ? '✓ 11 Digits Valid' : `${mobileNumber.length} / 11 Digits`}
+                </span>
+              </div>
               <div className="relative">
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                   <Phone className="w-4 h-4" />
                 </div>
                 <input
                   type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]{11}"
+                  maxLength={11}
                   value={mobileNumber}
-                  onChange={e => setMobileNumber(e.target.value)}
-                  placeholder="+880 1XX XXX XXXX"
+                  onChange={handleMobileChange}
+                  placeholder="01XXXXXXXXX (11 digits)"
                   required
-                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all font-mono"
+                  className={`w-full bg-white border rounded-xl py-3 pl-10 pr-10 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all font-mono font-bold tracking-wider ${
+                    mobileNumber.length === 11
+                      ? 'border-emerald-500 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500/20'
+                      : mobileNumber.length > 0
+                      ? 'border-amber-400 focus:border-blue-900'
+                      : 'border-slate-300 focus:border-blue-900'
+                  }`}
                 />
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                  {mobileNumber.length === 11 ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  ) : mobileNumber.length > 0 ? (
+                    <span className="text-[10px] font-bold text-amber-600">{11 - mobileNumber.length} left</span>
+                  ) : null}
+                </div>
               </div>
+              <p className="text-[11px] mt-1 text-slate-500 font-medium">
+                {mobileNumber.length === 11 ? (
+                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Exact 11-digit mobile number entered
+                  </span>
+                ) : (
+                  <span className="text-slate-500">
+                    Must be exactly 11 digits (e.g. 017XXXXXXXX)
+                  </span>
+                )}
+              </p>
             </div>
 
             {/* AMOUNT (BDT) */}
@@ -165,13 +213,26 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
                   type="number"
                   inputMode="decimal"
                   step="0.01"
+                  min="1"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
                   placeholder="0.00"
                   required
-                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-9 pr-4 text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none transition-all"
+                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-9 pr-4 text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none transition-all font-mono"
                 />
               </div>
+
+              {/* Dynamic Amount in Words Display */}
+              {inWords && (
+                <div className="mt-2 p-2.5 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-start gap-2 shadow-2xs">
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-800 bg-blue-100/90 px-1.5 py-0.5 rounded shrink-0 mt-0.5">
+                    In Words:
+                  </span>
+                  <span className="text-xs font-bold text-blue-950 leading-snug">
+                    {inWords}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* WAY */}

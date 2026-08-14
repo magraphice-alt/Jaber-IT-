@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { ArrowLeft, Bell, Upload, CheckCircle, FileText, X, Loader2 } from 'lucide-react';
 import { TransferMethod } from '../types';
+import { amountToWords } from '../utils/numberToWords';
 
 interface DepositRequestViewProps {
   onBack: () => void;
@@ -196,13 +197,26 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
                   type="number"
                   inputMode="decimal"
                   step="0.01"
+                  min="1"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
                   placeholder="0.00"
                   required
-                  className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-9 pr-4 text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-9 pr-4 text-sm font-semibold text-slate-900 placeholder-slate-400 outline-none transition-all font-mono"
                 />
               </div>
+
+              {/* Dynamic Amount in Words */}
+              {amountToWords(amount) && (
+                <div className="mt-2 p-2.5 bg-blue-50/90 border border-blue-200/80 rounded-xl flex items-start gap-2 shadow-2xs">
+                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-800 bg-blue-100/90 px-1.5 py-0.5 rounded shrink-0 mt-0.5">
+                    In Words:
+                  </span>
+                  <span className="text-xs font-bold text-blue-950 leading-snug">
+                    {amountToWords(amount)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Transfer Method */}

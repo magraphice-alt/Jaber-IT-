@@ -9,6 +9,7 @@ import { ProfileView } from './components/ProfileView';
 import { UserNavbar, UserTab } from './components/UserNavbar';
 import { AdminDashboard } from './components/AdminDashboard';
 import { NotificationDrawer } from './components/NotificationDrawer';
+import { HomeScreenInstallWidget } from './components/HomeScreenInstallWidget';
 
 const MainAppContent: React.FC = () => {
   const { currentUser } = useApp();
@@ -17,7 +18,12 @@ const MainAppContent: React.FC = () => {
 
   // If not logged in, show Login
   if (!currentUser) {
-    return <Login />;
+    return (
+      <>
+        <Login />
+        <HomeScreenInstallWidget />
+      </>
+    );
   }
 
   // If Admin logged in, show Admin Dashboard
@@ -26,6 +32,7 @@ const MainAppContent: React.FC = () => {
       <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
         <AdminDashboard onOpenNotifications={() => setIsNotifOpen(true)} />
         <NotificationDrawer isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
+        <HomeScreenInstallWidget />
       </div>
     );
   }
@@ -77,6 +84,9 @@ const MainAppContent: React.FC = () => {
         isOpen={isNotifOpen}
         onClose={() => setIsNotifOpen(false)}
       />
+
+      {/* Mobile Home Screen Shortcut / Installation Widget */}
+      <HomeScreenInstallWidget />
     </div>
   );
 };
