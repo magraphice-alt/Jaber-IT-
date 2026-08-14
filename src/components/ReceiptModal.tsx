@@ -50,7 +50,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 ${transaction.recipientMobile ? `*Target Number:* ${transaction.recipientMobile}\n` : ''}${
     transaction.adminPin ? `*Admin Security PIN:* ${transaction.adminPin}\n` : ''
 }*Amount:* ৳${transaction.amount.toLocaleString('en-BD')}
-───────────────────────────────
+${transaction.comment ? `*Comment / Note:* ${transaction.comment}\n` : ''}───────────────────────────────
 Thank you - Masud Telecom
   `.trim();
 
@@ -310,6 +310,20 @@ Thank you - Masud Telecom
                   {transaction.status}
                 </span>
               </div>
+
+              {/* User Note / Comment Box */}
+              {transaction.comment && (
+                <div className="pt-2 pb-1">
+                  <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 text-left">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">
+                      Comment / Note:
+                    </span>
+                    <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">
+                      {transaction.comment}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Thank you note */}

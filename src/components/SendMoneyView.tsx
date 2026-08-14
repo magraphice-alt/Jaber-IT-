@@ -140,12 +140,14 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
                   <Phone className="w-4 h-4" />
                 </div>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={mobileNumber}
                   onChange={e => setMobileNumber(e.target.value)}
                   placeholder="+880 1XX XXX XXXX"
                   required
-                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all"
+                  className="w-full bg-white border border-slate-300 focus:border-blue-900 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all font-mono"
                 />
               </div>
             </div>
@@ -161,6 +163,7 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
                 </span>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}

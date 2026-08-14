@@ -203,7 +203,9 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
               Target Mobile Number
             </label>
             <input
-              type="text"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               disabled={isExpired}
               value={mobileNumber}
               onChange={e => setMobileNumber(e.target.value)}
@@ -219,6 +221,8 @@ export const EditSendModal: React.FC<EditSendModalProps> = ({ transaction, onClo
             </label>
             <input
               type="number"
+              inputMode="decimal"
+              step="0.01"
               disabled={isExpired}
               value={amount}
               onChange={e => setAmount(e.target.value)}
