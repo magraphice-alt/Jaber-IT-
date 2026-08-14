@@ -341,60 +341,60 @@ Thank you - Masud Telecom
             </div>
 
             {/* Txn ID & Date Banner */}
-            <div className="bg-slate-100 p-2.5 rounded-xl flex items-center justify-between text-xs font-mono">
+            <div className="bg-slate-100 p-2 rounded-xl flex items-center justify-between text-[8px] font-mono">
               <div>
-                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Receipt No / Txn ID</span>
-                <strong className="text-slate-900 font-extrabold">{transaction.id}</strong>
+                <span className="text-[8px] text-slate-500 block uppercase font-sans font-bold">Receipt No / Txn ID</span>
+                <strong className="text-slate-900 font-extrabold text-[8px]">{transaction.id}</strong>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-slate-500 block uppercase font-sans font-bold">Date & Time</span>
-                <strong className="text-slate-700 font-bold text-[11px]">{receiptDate}</strong>
+                <span className="text-[8px] text-slate-500 block uppercase font-sans font-bold">Date & Time</span>
+                <strong className="text-slate-700 font-bold text-[8px]">{receiptDate}</strong>
               </div>
             </div>
 
             {/* Main Table Details */}
-            <div className="space-y-2 text-xs divide-y divide-slate-100">
+            <div className="space-y-1.5 text-[8px] divide-y divide-slate-100">
               <div className="flex justify-between py-1 items-center">
-                <span className="text-slate-500 font-medium">Transfer Type:</span>
-                <span className="font-bold uppercase text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px]">
+                <span className="text-slate-500 font-medium text-[8px]">Transfer Type:</span>
+                <span className="font-bold uppercase text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded text-[8px]">
                   {transaction.type}
                 </span>
               </div>
 
               <div className="flex justify-between py-1 items-center">
-                <span className="text-slate-500 font-medium">Method / Gateway:</span>
-                <strong className="text-slate-900 font-bold">{transaction.method}</strong>
+                <span className="text-slate-500 font-medium text-[8px]">Method / Gateway:</span>
+                <strong className="text-slate-900 font-bold text-[8px]">{transaction.method}</strong>
               </div>
 
               {transaction.recipientMobile && (
-                <div className="flex justify-between items-center py-2 bg-amber-50/70 -mx-2 px-2 rounded-lg border border-amber-200/80">
-                  <span className="text-amber-900 font-bold text-xs">Target Number:</span>
-                  <span className="font-mono font-black text-sm text-slate-900 bg-white px-2.5 py-0.5 rounded border border-amber-300">
+                <div className="flex justify-between items-center py-1.5 bg-amber-50/70 -mx-2 px-2 rounded-lg border border-amber-200/80">
+                  <span className="text-amber-900 font-bold text-[10px]">Target Number:</span>
+                  <span className="font-mono font-black text-[10px] text-slate-900 bg-white px-2 py-0.5 rounded border border-amber-300">
                     {transaction.recipientMobile}
                   </span>
                 </div>
               )}
 
               {transaction.adminPin && (
-                <div className="flex justify-between items-center py-2 bg-emerald-50/70 -mx-2 px-2 rounded-lg border border-emerald-200/80">
-                  <span className="text-emerald-900 font-bold text-xs flex items-center gap-1">
+                <div className="flex justify-between items-center py-1 bg-emerald-50/70 -mx-2 px-2 rounded-lg border border-emerald-200/80">
+                  <span className="text-emerald-900 font-bold text-[8px] flex items-center gap-1">
                     🔑 Admin Security PIN:
                   </span>
-                  <span className="font-mono font-black text-sm text-emerald-900 bg-white px-2.5 py-0.5 rounded border border-emerald-300">
+                  <span className="font-mono font-bold text-[8px] text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-300">
                     {transaction.adminPin}
                   </span>
                 </div>
               )}
 
-              <div className="flex justify-between py-2 text-sm border-t-2 border-slate-800 font-extrabold items-center">
-                <span className="text-slate-900">Total Amount:</span>
-                <span className="font-mono text-base text-blue-950 font-black">৳{transaction.amount.toLocaleString('en-BD')}</span>
+              <div className="flex justify-between py-1.5 text-[10px] border-t-2 border-slate-800 font-bold items-center">
+                <span className="text-slate-900 font-bold text-[10px]">Total Amount:</span>
+                <span className="font-mono text-[10px] text-blue-950 font-bold">৳{transaction.amount.toLocaleString('en-BD')}</span>
               </div>
 
-              <div className="flex justify-between py-1 text-xs items-center">
-                <span className="text-slate-500 font-medium">Status:</span>
+              <div className="flex justify-between py-1 text-[8px] items-center">
+                <span className="text-slate-500 font-medium text-[8px]">Status:</span>
                 <span
-                  className={`font-bold capitalize flex items-center gap-1 ${
+                  className={`font-bold capitalize flex items-center gap-1 text-[8px] ${
                     transaction.status === 'approved'
                       ? 'text-emerald-700'
                       : transaction.status === 'pending'
@@ -402,19 +402,19 @@ Thank you - Masud Telecom
                       : 'text-rose-700'
                   }`}
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3 h-3" />
                   {transaction.status}
                 </span>
               </div>
 
               {/* User Note / Comment Box */}
               {transaction.comment && (
-                <div className="pt-2 pb-1">
-                  <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200 text-left">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">
+                <div className="pt-1.5 pb-1">
+                  <div className="bg-slate-50 rounded-lg p-2 border border-slate-200 text-left">
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">
                       Comment / Note:
                     </span>
-                    <p className="text-xs font-semibold text-slate-800 break-words whitespace-pre-wrap">
+                    <p className="text-[8px] font-semibold text-slate-800 break-words whitespace-pre-wrap">
                       {transaction.comment}
                     </p>
                   </div>
