@@ -2,12 +2,13 @@
   "name": "Masud Telecom",
   "short_name": "Masud Telecom",
   "description": "Masud Telecom Financial Management & Digital Service",
-  "start_url": "/",
+  "start_url": "/?tab=send",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#1e3a8a",
+  "categories": ["finance", "business", "utilities"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -20,6 +21,44 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Send Money",
+      "short_name": "Send Money",
+      "description": "Send money instantly to Admin",
+      "url": "/?tab=send",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Deposit Request",
+      "short_name": "Deposit",
+      "description": "Deposit funds to your balance",
+      "url": "/?tab=deposit",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Statement",
+      "short_name": "Statement",
+      "description": "View account statement and history",
+      "url": "/?tab=statement",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

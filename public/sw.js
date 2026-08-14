@@ -1,31 +1,51 @@
-// Masud Telecom Service Worker for Home Screen Notifications & Offline Cache
-const CACHE_NAME = 'masud-telecom-v1';
+// Masud Telecom Service Worker for Mobile Notifications & Home Screen Shortcuts
+const CACHE_NAME = 'masud-telecom-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) =>
+        Promise.all(
+          keys.map((key) => {
+            if (key !== CACHE_NAME) {
+              return caches.delete(key);
+            }
+          })
+        )
+      )
+    ])
+  );
 });
 
-// Listen for message from main app to show notification with 3+ second vibration & sound
+// Show legitimate mobile notification in device status bar / notification drawer with sound & vibration
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_HOME_SCREEN_NOTIFICATION') {
-    const title = event.data.title || '🎉 Masud Telecom Added to Home Screen';
+    let rawTitle = event.data.title || 'Account Notification';
+    // Format title cleanly without spam triggers
+    const title = rawTitle.startsWith('Masud Telecom') ? rawTitle : `Masud Telecom: ${rawTitle.replace(/^[^\w\s]+/, '').trim()}`;
+    const body = event.data.body || 'Activity updated in your Masud Telecom account.';
+    
     const options = {
-      body: event.data.body || 'App shortcut is now saved on your mobile home screen. Tap to launch anytime!',
+      body,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
-      vibrate: [1000, 150, 1000, 150, 1000], // 3.3 seconds vibration pattern (> 3 seconds)
-      tag: 'home-screen-shortcut-installed',
+      vibrate: [600, 150, 600, 150, 600, 150, 600], // 3.4+ seconds vibration pattern
+      silent: false,
       renotify: true,
-      requireInteraction: true,
+      timestamp: Date.now(),
+      tag: `masud-txn-${Date.now()}`,
+      requireInteraction: false,
       data: {
-        url: '/'
+        url: event.data.url || '/?tab=send',
+        dateOfArrival: Date.now()
       },
       actions: [
-        { action: 'open', title: 'Open App' }
+        { action: 'open', title: 'Open Account' }
       ]
     };
 
@@ -35,18 +55,23 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Notification click handler
+// Handle tap on system notification in mobile notification bar
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/?tab=send';
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url && 'focus' in client) {
+        if ('focus' in client) {
+          if (client.url && !client.url.includes(targetUrl)) {
+            client.navigate(targetUrl);
+          }
           return client.focus();
         }
       }
       if (self.clients.openWindow) {
-        return self.clients.openWindow('/');
+        return self.clients.openWindow(targetUrl);
       }
     })
   );

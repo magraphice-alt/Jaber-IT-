@@ -2,9 +2,20 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { User, Transaction, NotificationItem, SystemSettings, TransferMethod } from '../types';
 import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { amountToWords } from '../utils/numberToWords';
-import { sendHomeScreenNotification, playNotificationSound, triggerVibration } from '../utils/notificationSound';
+import {
+  sendHomeScreenNotification,
+  playNotificationSound,
+  playSuccessChime,
+  triggerQuickHaptic
+} from '../utils/notificationSound';
+
+export interface OperationAlertState {
+  visible: boolean;
+  message: string;
+  subMessage?: string;
+}
 
 interface AppContextType {
   currentUser: User | null;
@@ -12,6 +23,8 @@ interface AppContextType {
   transactions: Transaction[];
   notifications: NotificationItem[];
   settings: SystemSettings;
+  operationSuccessAlert: OperationAlertState;
+  triggerOperationSuccess: (message?: string, subMessage?: string) => void;
   login: (email: string, pass: string) => { success: boolean; message?: string };
   logout: () => void;
   createSendRequest: (recipientMobile: string, amount: number, method: TransferMethod, comment?: string) => Promise<boolean>;
@@ -91,6 +104,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Global 1-second operation success display alert state
+  const [operationSuccessAlert, setOperationSuccessAlert] = useState<OperationAlertState>({
+    visible: false,
+    message: 'Your operation successful!'
+  });
+
+  const alertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerOperationSuccess = (message: string = 'Your operation successful!', subMessage?: string) => {
+    if (alertTimerRef.current) {
+      clearTimeout(alertTimerRef.current);
+    }
+    playSuccessChime();
+    triggerQuickHaptic();
+    setOperationSuccessAlert({
+      visible: true,
+      message,
+      subMessage
+    });
+    // Hide precisely after 1 second (1000ms) as requested
+    alertTimerRef.current = setTimeout(() => {
+      setOperationSuccessAlert(prev => ({ ...prev, visible: false }));
+    }, 1000);
+  };
+
   // Reference to track already-notified notification IDs so we only alert for new activities
   const notifiedIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef<boolean>(false);
@@ -140,6 +178,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubscribeNotifs = onSnapshot(notifsColRef, snapshot => {
         if (!snapshot.empty) {
           const fsNotifs: NotificationItem[] = snapshot.docs.map(docSnap => docSnap.data() as NotificationItem);
+          fsNotifs.sort((a, b) => {
+            const timeA = typeof a.timestamp === 'string' ? a.timestamp : '';
+            const timeB = typeof b.timestamp === 'string' ? b.timestamp : '';
+            return timeB.localeCompare(timeA);
+          });
           setNotifications(fsNotifs);
 
           // Check if any incoming notification is new and triggers an alert
@@ -149,7 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const item = change.doc.data() as NotificationItem;
                 if (item && !notifiedIdsRef.current.has(item.id)) {
                   notifiedIdsRef.current.add(item.id);
-                  // Sound chime & 3+ second vibration!
+                  // Sound chime & 3+ second vibration & mobile tray notification
                   sendHomeScreenNotification(item.title, item.message);
                 }
               }
@@ -169,8 +212,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, err => {
         console.warn('Firestore notifications listener error:', err);
       });
-    } catch (e) {
-      console.warn('Firestore setup error:', e);
+    } catch (err) {
+      console.warn('Firebase connection listener failure, relying on local sync:', err);
     }
 
     return () => {
@@ -180,7 +223,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Sync state to local storage safely
+  // Sync to localStorage
   useEffect(() => {
     safeSaveLocal(LOCAL_STORAGE_KEY_USERS, users);
   }, [users]);
@@ -198,10 +241,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [settings]);
 
   useEffect(() => {
-    safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, passwords);
-  }, [passwords]);
-
-  useEffect(() => {
     if (currentUser) {
       safeSaveLocal(LOCAL_STORAGE_KEY_AUTH, currentUser);
     } else {
@@ -209,33 +248,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  // Keep active user updated when users list changes
+  // Keep currentUser state in sync with updated users list
   useEffect(() => {
     if (currentUser) {
-      const match = users.find(u => u.id === currentUser.id);
-      if (match) {
-        setCurrentUser(match);
+      const refreshed = users.find(u => u.id === currentUser.id);
+      if (refreshed && (refreshed.balance !== currentUser.balance || refreshed.totalSend !== currentUser.totalSend || refreshed.avatarUrl !== currentUser.avatarUrl || refreshed.name !== currentUser.name)) {
+        setCurrentUser(refreshed);
       }
     }
-  }, [users]);
+  }, [users, currentUser]);
 
-  const login = (email: string, pass: string) => {
-    const trimmedEmail = email.trim().toLowerCase();
-    const match = users.find(u => u.email.toLowerCase() === trimmedEmail);
-    if (!match) {
-      return { success: false, message: 'Invalid Email address or User ID not found.' };
+  const login = (email: string, pass: string): { success: boolean; message?: string } => {
+    const cleanEmail = email.trim().toLowerCase();
+    const targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+
+    if (!targetUser) {
+      return { success: false, message: 'Account not found with this email.' };
     }
 
-    const storedPass = passwords[trimmedEmail];
-    if (storedPass && storedPass !== pass) {
-      return { success: false, message: 'Incorrect Password. Please check your credentials.' };
+    const storedPass = passwords[cleanEmail] || '123456';
+    if (storedPass !== pass.trim()) {
+      return { success: false, message: 'Invalid password. Please try again.' };
     }
 
-    if (match.status === 'suspended') {
-      return { success: false, message: 'Your account is currently suspended. Contact Admin.' };
+    if (targetUser.status === 'blocked') {
+      return { success: false, message: 'Your account is currently suspended. Please contact Admin.' };
     }
 
-    setCurrentUser(match);
+    setCurrentUser(targetUser);
     return { success: true };
   };
 
@@ -289,6 +329,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifiedIdsRef.current.add(adminNotif.id);
     sendHomeScreenNotification(adminNotif.title, adminNotif.message);
     setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
+
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', `Send Request of ৳${amount.toLocaleString('en-BD')} submitted to Admin.`);
 
     return true;
   };
@@ -346,6 +389,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(err => {
         console.warn('Firestore notification error:', err);
       });
+
+      // Show 1-second success display
+      triggerOperationSuccess('Your operation successful!', `Deposit Request of ৳${amount.toLocaleString('en-BD')} submitted.`);
 
       return true;
     } catch (e) {
@@ -416,6 +462,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifiedIdsRef.current.add(userNotif.id);
     sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
+
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', `Transaction ${txn.id} approved.`);
   };
 
   const chargeUserBalance = (userId: string, chargeAmount: number, reason?: string) => {
@@ -483,6 +532,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sendHomeScreenNotification(notif.title, notif.message);
     setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', `Debited ৳${chargeAmount.toLocaleString('en-BD')} service charge.`);
+
     return {
       success: true,
       message: `Successfully debited ৳${chargeAmount.toLocaleString('en-BD')} from ${targetUser.name}'s balance.`
@@ -531,45 +583,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Record adjustment transaction
     const adjustTxn: Transaction = {
-      id: `${isCredit ? 'CRD' : 'DBT'}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `ADJ-${Math.floor(1000 + Math.random() * 9000)}`,
       userId: targetUser.id,
       userName: targetUser.name,
       userEmail: targetUser.email,
       type: isCredit ? 'deposit' : 'charge',
       amount: amount,
-      method: isCredit ? 'Admin Credit' : 'Admin Debit',
+      method: 'Cash',
       comment: commentText,
       status: 'approved',
       commissionEarned: 0,
       createdAt: new Date().toISOString(),
       approvedAt: new Date().toISOString()
     };
-
     setTransactions(prev => [adjustTxn, ...prev]);
     setDoc(doc(db, 'transactions', adjustTxn.id), cleanForFirestore(adjustTxn)).catch(() => {});
 
-    // Send notification to user
+    // Send notification
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       userId: targetUser.id,
-      title: isCredit ? 'Account Credited (+ Balance)' : 'Account Debited (- Balance)',
-      message: isCredit
-        ? `৳${amount.toLocaleString('en-BD')} was manually credited to your balance by Admin. ${note ? `Note: ${note}` : ''}`
-        : `৳${amount.toLocaleString('en-BD')} was manually debited from your balance by Admin. ${note ? `Note: ${note}` : ''}`,
+      title: isCredit ? 'Balance Credited (Deposit)' : 'Balance Debited (Charge)',
+      message: `An amount of ৳${amount.toLocaleString('en-BD')} was ${isCredit ? 'credited to' : 'debited from'} your balance. Note: ${note || 'Admin adjustment'}`,
       timestamp: 'Just now',
       read: false,
       type: isCredit ? 'success' : 'warning',
       txnId: adjustTxn.id
     };
-
     setNotifications(prev => [notif, ...prev]);
     notifiedIdsRef.current.add(notif.id);
     sendHomeScreenNotification(notif.title, notif.message);
     setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', `Balance adjusted by ৳${amount.toLocaleString('en-BD')}.`);
+
     return {
       success: true,
-      message: `Successfully ${isCredit ? 'credited (+)' : 'debited (-)'} ৳${amount.toLocaleString('en-BD')} for ${targetUser.name}.`
+      message: `Successfully ${isCredit ? 'credited' : 'debited'} ৳${amount.toLocaleString('en-BD')} for ${targetUser.name}.`
     };
   };
 
@@ -578,19 +629,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     targetUserId?: string
   ): { success: boolean; message: string } => {
     const userIdToUpdate = targetUserId || currentUser?.id;
-    if (!userIdToUpdate) return { success: false, message: 'No user specified.' };
+    if (!userIdToUpdate) return { success: false, message: 'No user identified to update.' };
 
-    const targetUser = users.find(u => u.id === userIdToUpdate) || (currentUser?.id === userIdToUpdate ? currentUser : null);
-    if (!targetUser) return { success: false, message: 'User not found.' };
+    const targetUser = users.find(u => u.id === userIdToUpdate);
+    if (!targetUser) return { success: false, message: 'User record not found.' };
 
     const newName = data.name !== undefined ? data.name.trim() : targetUser.name;
     const newMobile = data.mobile !== undefined ? data.mobile.trim() : targetUser.mobile;
     const newAddress = data.address !== undefined ? data.address.trim() : targetUser.address;
     const newAvatar = data.avatarUrl !== undefined ? data.avatarUrl : targetUser.avatarUrl;
-
-    if (!newName) {
-      return { success: false, message: 'Full Name cannot be empty.' };
-    }
 
     const updatedUser: User = {
       ...targetUser,
@@ -605,6 +652,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(updatedUser);
     }
     setDoc(doc(db, 'users', userIdToUpdate), cleanForFirestore(updatedUser)).catch(() => {});
+
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', 'Profile updated.');
 
     return { success: true, message: 'Profile updated successfully!' };
   };
@@ -625,6 +675,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newPasswords = { ...passwords, [userEmailKey]: newPass.trim() };
     setPasswords(newPasswords);
     safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, newPasswords);
+
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', 'Password changed.');
 
     return { success: true, message: 'Password changed successfully!' };
   };
@@ -654,6 +707,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifiedIdsRef.current.add(userNotif.id);
     sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
+
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', `Transaction ${txn.id} rejected.`);
   };
 
   const editPendingSendRequest = (
@@ -707,6 +763,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sendHomeScreenNotification(adminNotif.title, adminNotif.message);
     setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
 
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', 'Send request updated.');
+
     return { success: true, message: 'Transaction updated successfully!' };
   };
 
@@ -750,6 +809,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sendHomeScreenNotification(cancelNotif.title, cancelNotif.message);
     setDoc(doc(db, 'notifications', cancelNotif.id), cleanForFirestore(cancelNotif)).catch(() => {});
 
+    // Show 1-second success display
+    triggerOperationSuccess('Your operation successful!', 'Send request cancelled.');
+
     return { success: true, message: 'Send request cancelled successfully.' };
   };
 
@@ -760,6 +822,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDoc(doc(db, 'users', u.id), updated).catch(() => {});
       return updated;
     }));
+    triggerOperationSuccess('Your operation successful!', 'Commission rate updated.');
   };
 
   const createUserAccount = (userData: Partial<User>, passwordStr: string) => {
@@ -791,6 +854,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPasswords(prev => ({ ...prev, [emailKey]: passwordStr || 'Masud@123' }));
     setDoc(doc(db, 'users', newUser.id), newUser).catch(() => {});
 
+    triggerOperationSuccess('Your operation successful!', `User ${newUser.name} created.`);
+
     return { success: true };
   };
 
@@ -805,6 +870,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setUsers(prev => prev.filter(u => u.id !== userId));
     deleteDoc(doc(db, 'users', userId)).catch(() => {});
+
+    triggerOperationSuccess('Your operation successful!', `Account for ${target.name} deleted.`);
 
     return { success: true, message: `Account for ${target.name} deleted successfully.` };
   };
@@ -837,6 +904,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         transactions,
         notifications,
         settings,
+        operationSuccessAlert,
+        triggerOperationSuccess,
         login,
         logout,
         createSendRequest,
@@ -868,4 +937,3 @@ export const useApp = () => {
   }
   return context;
 };
-

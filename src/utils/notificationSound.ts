@@ -20,24 +20,23 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-// Automatically unlock audio on first user touch/interaction
+// Automatically unlock audio on user touch, tap, key, or scroll
 if (typeof window !== 'undefined') {
   const unlockAudio = () => {
     const ctx = getAudioContext();
     if (ctx && ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        window.removeEventListener('click', unlockAudio);
-        window.removeEventListener('touchstart', unlockAudio);
-      }).catch(() => {});
-    } else if (ctx) {
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
+      ctx.resume().catch(() => {});
     }
   };
-  window.addEventListener('click', unlockAudio, { passive: true });
-  window.addEventListener('touchstart', unlockAudio, { passive: true });
+  ['click', 'touchstart', 'touchend', 'keydown', 'scroll'].forEach(evt => {
+    window.addEventListener(evt, unlockAudio, { passive: true, capture: true });
+  });
 }
 
+/**
+ * Plays a loud, crystal-clear banking alert chime with dual oscillators and harmonics
+ * Engineered to cut through mobile phone speakers clearly.
+ */
 export function playNotificationSound(): void {
   try {
     const ctx = getAudioContext();
@@ -48,19 +47,75 @@ export function playNotificationSound(): void {
     }
 
     const now = ctx.currentTime;
-    // Energetic chime sequence (E5 -> G5 -> B5 -> E6)
+    // Multi-frequency harmonic chords (C6 -> E6 -> G6 -> C7)
     const tones = [
-      { freq: 659.25, time: 0.00, dur: 0.25 },
-      { freq: 783.99, time: 0.12, dur: 0.25 },
-      { freq: 987.77, time: 0.24, dur: 0.30 },
-      { freq: 1318.51, time: 0.38, dur: 0.55 },
+      { freq: 1046.50, harmonic: 2093.00, time: 0.00, dur: 0.28 }, // C6
+      { freq: 1318.51, harmonic: 2637.02, time: 0.12, dur: 0.30 }, // E6
+      { freq: 1567.98, harmonic: 3135.96, time: 0.24, dur: 0.35 }, // G6
+      { freq: 2093.00, harmonic: 4186.01, time: 0.38, dur: 0.65 }, // C7
+    ];
+
+    tones.forEach(t => {
+      // Primary Oscillator
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(t.freq, now + t.time);
+
+      gain.gain.setValueAtTime(0.001, now + t.time);
+      gain.gain.linearRampToValueAtTime(0.38, now + t.time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t.time + t.dur);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + t.time);
+      osc.stop(now + t.time + t.dur + 0.05);
+
+      // Overtone harmonic layer for sharpness on phone speakers
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(t.harmonic, now + t.time);
+
+      gain2.gain.setValueAtTime(0.001, now + t.time);
+      gain2.gain.linearRampToValueAtTime(0.18, now + t.time + 0.02);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + t.time + (t.dur * 0.8));
+
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+
+      osc2.start(now + t.time);
+      osc2.stop(now + t.time + t.dur + 0.05);
+    });
+  } catch (err) {
+    console.warn('Audio playback error:', err);
+  }
+}
+
+/**
+ * Short crisp success tone for instant feedback on successful operation
+ */
+export function playSuccessChime(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const tones = [
+      { freq: 880.00, time: 0.00, dur: 0.16 }, // A5
+      { freq: 1318.51, time: 0.10, dur: 0.35 }, // E6
     ];
 
     tones.forEach(t => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = 'sine';
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(t.freq, now + t.time);
 
       gain.gain.setValueAtTime(0.001, now + t.time);
@@ -74,22 +129,33 @@ export function playNotificationSound(): void {
       osc.stop(now + t.time + t.dur + 0.05);
     });
   } catch (err) {
-    console.warn('Audio playback error:', err);
+    console.warn('Success chime error:', err);
   }
 }
 
 /**
- * Trigger continuous vibration for minimum 3+ seconds on mobile
- * Pattern: 800ms vibrate, 150ms rest, 800ms vibrate, 150ms rest, 800ms vibrate, 150ms rest, 800ms vibrate = 3,650ms (~3.65s)
+ * Trigger continuous vibration for minimum 3+ seconds on mobile devices
+ * Pattern: 600ms vibrate, 150ms rest, 600ms vibrate, 150ms rest, 600ms vibrate, 150ms rest, 600ms vibrate (~3.45s)
  */
 export function triggerVibration(durationMs: number = 3400): void {
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      navigator.vibrate([800, 150, 800, 150, 800, 150, 800]);
+      navigator.vibrate([600, 150, 600, 150, 600, 150, 600]);
     }
   } catch (err) {
     console.warn('Vibration error:', err);
   }
+}
+
+/**
+ * Trigger quick tactile feedback (60ms) for button taps / operations
+ */
+export function triggerQuickHaptic(): void {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(60);
+    }
+  } catch {}
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -104,40 +170,70 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Triggers full activity alert: sound + minimum 3-second vibration + system notification
+ * Formats notification title cleanly to avoid spam detection by mobile OS
+ */
+function cleanNotificationTitle(title: string): string {
+  const sanitized = title.replace(/^[^\w\s]+/, '').trim();
+  if (sanitized.toLowerCase().startsWith('masud telecom')) {
+    return sanitized;
+  }
+  return `Masud Telecom: ${sanitized}`;
+}
+
+/**
+ * Triggers full activity alert: sound chime + 3+ second vibration + system notification in mobile status bar
  */
 export async function sendHomeScreenNotification(
-  title: string = '🎉 Masud Telecom Alert',
+  title: string = 'Masud Telecom: Account Notification',
   body: string = 'Activity updated in your Masud Telecom account.'
 ): Promise<void> {
-  // 1. Play sound chime
+  const cleanTitle = cleanNotificationTitle(title);
+
+  // 1. Play loud audible chime
   playNotificationSound();
 
-  // 2. Trigger minimum 3.4 seconds vibration
+  // 2. Trigger 3+ seconds vibration
   triggerVibration(3400);
 
-  // 3. Dispatch system notification to mobile screen
+  // 3. Dispatch system notification to mobile notification status bar
   try {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg && reg.active) {
-        reg.active.postMessage({
-          type: 'SHOW_HOME_SCREEN_NOTIFICATION',
-          title,
-          body
-        });
-        return;
+      if (reg) {
+        if (reg.showNotification && Notification.permission === 'granted') {
+          await reg.showNotification(cleanTitle, {
+            body,
+            icon: '/icon-192.png',
+            badge: '/icon-192.png',
+            vibrate: [600, 150, 600, 150, 600, 150, 600],
+            silent: false,
+            timestamp: Date.now(),
+            tag: `masud-txn-${Date.now()}`,
+            renotify: true,
+            requireInteraction: false,
+            data: { url: '/?tab=send', timestamp: Date.now() }
+          } as unknown as NotificationOptions);
+          return;
+        } else if (reg.active) {
+          reg.active.postMessage({
+            type: 'SHOW_HOME_SCREEN_NOTIFICATION',
+            title: cleanTitle,
+            body,
+            url: '/?tab=send'
+          });
+          return;
+        }
       }
     }
 
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, {
+      new Notification(cleanTitle, {
         body,
-        icon: '/icon.svg',
-        tag: `masud-telecom-activity-${Date.now()}`
+        icon: '/icon-192.png',
+        tag: `masud-txn-${Date.now()}`
       });
     }
   } catch (err) {
-    console.warn('Failed to dispatch notification:', err);
+    console.warn('Failed to dispatch notification to status bar:', err);
   }
 }

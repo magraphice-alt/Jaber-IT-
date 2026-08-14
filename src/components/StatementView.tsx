@@ -16,6 +16,8 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
 
+  const [visibleCount, setVisibleCount] = useState<number>(10);
+
   const [selectType, setSelectType] = useState<'' | 'all' | 'send' | 'deposit' | 'commission' | 'only_number'>('');
   const [singleDate, setSingleDate] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -36,6 +38,7 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setVisibleCount(10);
     setActiveFilter({
       selectType,
       singleDate: selectType !== 'only_number' ? (singleDate || undefined) : undefined,
@@ -52,6 +55,7 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
     setToDate('');
     setSearchMobile('');
     setActiveFilter({});
+    setVisibleCount(10);
   };
 
   // Filter user's transactions based on active filter
@@ -256,36 +260,34 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="space-y-2 pt-1">
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer text-sm active:scale-98"
-                >
-                  <Search className="w-4 h-4" />
-                  <span>Search</span>
-                </button>
-                {isFilterActive && (
-                  <button
-                    type="button"
-                    onClick={handleClearFilter}
-                    className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
+            {/* Action Buttons in One Line with Font Size 8 */}
+            <div className="flex items-center gap-1.5 pt-1">
+              <button
+                type="submit"
+                className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-2.5 px-2 rounded-xl shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer text-[8px] whitespace-nowrap active:scale-98"
+              >
+                <Search className="w-3 h-3 shrink-0" />
+                <span>Search</span>
+              </button>
 
-              {/* Download PDF Button */}
               <button
                 type="button"
                 onClick={handleDownloadPDF}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer text-sm active:scale-98"
+                className="flex-[1.4] bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2.5 px-2 rounded-xl shadow-sm transition-all flex items-center justify-center gap-1 cursor-pointer text-[8px] whitespace-nowrap active:scale-98"
               >
-                <Download className="w-4 h-4 text-emerald-200" />
+                <Download className="w-3 h-3 text-emerald-200 shrink-0" />
                 <span>Download PDF Statement</span>
               </button>
+
+              {isFilterActive && (
+                <button
+                  type="button"
+                  onClick={handleClearFilter}
+                  className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-[8px] whitespace-nowrap transition-colors cursor-pointer shrink-0"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -293,9 +295,14 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
         {/* Statement History List */}
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-base font-bold text-slate-900">
+            <h2 className="text-xs font-bold text-slate-900">
               Transaction Records ({userTxns.length})
             </h2>
+            {userTxns.length > 0 && (
+              <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                Showing {Math.min(visibleCount, userTxns.length)} of {userTxns.length}
+              </span>
+            )}
           </div>
 
           {userTxns.length === 0 ? (
@@ -305,120 +312,138 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
               <p className="text-xs text-slate-400 mt-1">Try adjusting the date or mobile filters</p>
             </div>
           ) : (
-            userTxns.map(t => {
-              const isSend = t.type === 'send';
-              const isCharge = t.type === 'charge';
-              return (
-                <div
-                  key={t.id}
-                  className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-2.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`p-2 rounded-xl text-white ${
-                          isCharge
-                            ? 'bg-rose-600'
-                            : isSend
-                            ? 'bg-blue-900'
-                            : 'bg-emerald-600'
-                        }`}
-                      >
-                        {isCharge ? (
-                          <ArrowUpRight className="w-4 h-4 rotate-90" />
-                        ) : isSend ? (
-                          <ArrowUpRight className="w-4 h-4" />
-                        ) : (
-                          <PlusCircle className="w-4 h-4" />
-                        )}
-                      </div>
-                      <div>
-                        <span className="text-sm font-bold text-slate-900 block leading-tight">
-                          {t.comment || (isCharge ? 'Commission Charge / Deduction' : isSend ? `Send to ${t.recipientMobile}` : 'Deposit')}
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          Method: {t.method} &bull; ID: {t.id}
-                        </span>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${
-                        isCharge
-                          ? 'bg-rose-100 text-rose-800'
-                          : t.status === 'approved'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : t.status === 'pending'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}
-                    >
-                      {(isCharge || t.status === 'approved') && <CheckCircle className="w-3 h-3" />}
-                      {t.status === 'pending' && <Clock className="w-3 h-3" />}
-                      {t.status === 'rejected' && <AlertCircle className="w-3 h-3" />}
-                      <span className="capitalize">{isCharge ? 'Deducted' : t.status}</span>
-                    </span>
-                  </div>
-
-                  {/* Send Money Amount & Date Row */}
-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex items-center justify-between my-1">
-                    <div>
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Amount</span>
-                      <div className={`text-base sm:text-lg font-black font-mono ${isSend || isCharge ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {isSend || isCharge ? '-' : '+'}৳{t.amount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase block">Date & Time</span>
-                      <span className="text-xs text-slate-600 font-medium">{new Date(t.createdAt).toLocaleString('en-BD')}</span>
-                    </div>
-                  </div>
-
-                  {/* Target Number & Admin Security PIN (Under the send money amount) */}
-                  {(t.recipientMobile || t.adminPin) && (
-                    <div className="bg-slate-50/70 rounded-xl p-2.5 border border-slate-200 text-xs space-y-1.5 my-1">
-                      {t.recipientMobile && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase">Target Number:</span>
-                          <span className="font-mono font-bold text-slate-900">{t.recipientMobile}</span>
+            <>
+              {userTxns.slice(0, visibleCount).map(t => {
+                const isSend = t.type === 'send';
+                const isCharge = t.type === 'charge';
+                return (
+                  <div
+                    key={t.id}
+                    className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200/80 space-y-2 text-[9px]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className={`p-1.5 rounded-lg text-white ${
+                            isCharge
+                              ? 'bg-rose-600'
+                              : isSend
+                              ? 'bg-blue-900'
+                              : 'bg-emerald-600'
+                          }`}
+                        >
+                          {isCharge ? (
+                            <ArrowUpRight className="w-3 h-3 rotate-90" />
+                          ) : isSend ? (
+                            <ArrowUpRight className="w-3 h-3" />
+                          ) : (
+                            <PlusCircle className="w-3 h-3" />
+                          )}
                         </div>
-                      )}
-                      {t.adminPin && (
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase">Admin Security PIN:</span>
-                          <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                            🔑 {t.adminPin}
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-900 block leading-tight">
+                            {t.comment || (isCharge ? 'Commission Charge / Deduction' : isSend ? `Send to ${t.recipientMobile}` : 'Deposit')}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-mono">
+                            Method: {t.method} &bull; ID: {t.id}
                           </span>
                         </div>
-                      )}
+                      </div>
+
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          isCharge
+                            ? 'bg-rose-100 text-rose-800'
+                            : t.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : t.status === 'pending'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {(isCharge || t.status === 'approved') && <CheckCircle className="w-2.5 h-2.5" />}
+                        {t.status === 'pending' && <Clock className="w-2.5 h-2.5" />}
+                        {t.status === 'rejected' && <AlertCircle className="w-2.5 h-2.5" />}
+                        <span className="capitalize">{isCharge ? 'Deducted' : t.status}</span>
+                      </span>
                     </div>
-                  )}
 
-                  {/* Pending Send Widget with 10-Min Timer Bar */}
-                  {t.status === 'pending' && (
-                    <PendingSendWidget
-                      transaction={t}
-                      onOpenEdit={() => setSelectedEditTxn(t)}
-                    />
-                  )}
+                    {/* Send Money Amount & Date Row */}
+                    <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 flex items-center justify-between my-1">
+                      <div>
+                        <span className="text-[9px] text-slate-500 font-bold uppercase block leading-none mb-0.5">Amount</span>
+                        <div className={`text-sm font-black font-mono leading-tight ${isSend || isCharge ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {isSend || isCharge ? '-' : '+'}৳{t.amount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase block leading-none mb-0.5">Date & Time</span>
+                        <span className="text-[9px] text-slate-600 font-medium">{new Date(t.createdAt).toLocaleString('en-BD')}</span>
+                      </div>
+                    </div>
 
-                  {/* Last: View Receipt Button */}
-                  <div className="pt-2 border-t border-slate-100 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={e => {
-                        e.stopPropagation();
-                        setSelectedReceiptTxn(t);
-                      }}
-                      className="bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-xs"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-blue-300" />
-                      <span>View Receipt</span>
-                    </button>
+                    {/* Target Number & Admin Security PIN (Under the send money amount) */}
+                    {(t.recipientMobile || t.adminPin) && (
+                      <div className="bg-slate-50/70 rounded-xl p-2 border border-slate-200 text-[9px] space-y-1 my-1">
+                        {t.recipientMobile && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] text-slate-500 font-bold uppercase">Target Number:</span>
+                            <span className="font-mono font-bold text-slate-900 text-[9px]">{t.recipientMobile}</span>
+                          </div>
+                        )}
+                        {t.adminPin && (
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                            <span className="text-[9px] text-slate-500 font-bold uppercase">Admin Security PIN:</span>
+                            <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[9px]">
+                              🔑 {t.adminPin}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Pending Send Widget with 10-Min Timer Bar */}
+                    {t.status === 'pending' && (
+                      <PendingSendWidget
+                        transaction={t}
+                        onOpenEdit={() => setSelectedEditTxn(t)}
+                      />
+                    )}
+
+                    {/* Last: View Receipt Button */}
+                    <div className="pt-1.5 border-t border-slate-100 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedReceiptTxn(t);
+                        }}
+                        className="bg-blue-900 hover:bg-blue-800 text-white text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                      >
+                        <FileText className="w-3 h-3 text-blue-300" />
+                        <span>View Receipt</span>
+                      </button>
+                    </div>
                   </div>
+                );
+              })}
+
+              {/* Show More Button */}
+              {visibleCount < userTxns.length && (
+                <div className="pt-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(prev => prev + 10)}
+                    className="w-full bg-white hover:bg-slate-50 active:bg-slate-100 text-blue-900 font-bold py-2.5 px-4 rounded-xl border border-blue-200/80 shadow-xs text-[9px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <span>Show More ({Math.min(10, userTxns.length - visibleCount)} More Records)</span>
+                    <span className="bg-blue-100 text-blue-900 px-1.5 py-0.2 rounded-full font-black text-[9px]">
+                      +{Math.min(10, userTxns.length - visibleCount)}
+                    </span>
+                  </button>
                 </div>
-              );
-            })
+              )}
+            </>
           )}
         </div>
       </div>
