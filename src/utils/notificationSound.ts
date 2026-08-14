@@ -1,49 +1,100 @@
-// Notification, Sound & 3+ Second Vibration Trigger Utility
+// Notification, Sound & 3+ Second Vibration Utility for Mobile Home Screen & Real-time Activities
 
-export function playNotificationSound(): void {
+let sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-
-    // Sequence of 4 chime tones
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
-      
-      gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.12);
-      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + idx * 0.12 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.4);
-      
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      
-      osc.start(ctx.currentTime + idx * 0.12);
-      osc.stop(ctx.currentTime + idx * 0.12 + 0.45);
-    });
+    if (!sharedAudioCtx) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        sharedAudioCtx = new AudioContextClass();
+      }
+    }
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    return sharedAudioCtx;
   } catch (err) {
-    console.error('Audio playback error:', err);
+    console.warn('AudioContext init error:', err);
+    return null;
   }
 }
 
-export function triggerVibration(durationMs: number = 3200): void {
+// Automatically unlock audio on first user touch/interaction
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        window.removeEventListener('click', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
+      }).catch(() => {});
+    } else if (ctx) {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    }
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+}
+
+export function playNotificationSound(): void {
   try {
-    if ('vibrate' in navigator) {
-      // 3.4 seconds pattern: [1000ms vibrate, 150ms pause, 1000ms vibrate, 150ms pause, 1100ms vibrate]
-      navigator.vibrate([1000, 150, 1000, 150, 1100]);
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    // Energetic chime sequence (E5 -> G5 -> B5 -> E6)
+    const tones = [
+      { freq: 659.25, time: 0.00, dur: 0.25 },
+      { freq: 783.99, time: 0.12, dur: 0.25 },
+      { freq: 987.77, time: 0.24, dur: 0.30 },
+      { freq: 1318.51, time: 0.38, dur: 0.55 },
+    ];
+
+    tones.forEach(t => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(t.freq, now + t.time);
+
+      gain.gain.setValueAtTime(0.001, now + t.time);
+      gain.gain.linearRampToValueAtTime(0.35, now + t.time + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t.time + t.dur);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + t.time);
+      osc.stop(now + t.time + t.dur + 0.05);
+    });
+  } catch (err) {
+    console.warn('Audio playback error:', err);
+  }
+}
+
+/**
+ * Trigger continuous vibration for minimum 3+ seconds on mobile
+ * Pattern: 800ms vibrate, 150ms rest, 800ms vibrate, 150ms rest, 800ms vibrate, 150ms rest, 800ms vibrate = 3,650ms (~3.65s)
+ */
+export function triggerVibration(durationMs: number = 3400): void {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([800, 150, 800, 150, 800, 150, 800]);
     }
   } catch (err) {
-    console.error('Vibration error:', err);
+    console.warn('Vibration error:', err);
   }
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
-    if (!('Notification' in window)) return false;
+    if (typeof window === 'undefined' || !('Notification' in window)) return false;
     if (Notification.permission === 'granted') return true;
     const perm = await Notification.requestPermission();
     return perm === 'granted';
@@ -52,22 +103,25 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
+/**
+ * Triggers full activity alert: sound + minimum 3-second vibration + system notification
+ */
 export async function sendHomeScreenNotification(
-  title: string = '🎉 Masud Telecom Added to Home Screen',
-  body: string = 'App shortcut is successfully saved on your mobile home screen. Tap anytime to open!'
+  title: string = '🎉 Masud Telecom Alert',
+  body: string = 'Activity updated in your Masud Telecom account.'
 ): Promise<void> {
-  // 1. Play sound
+  // 1. Play sound chime
   playNotificationSound();
 
-  // 2. Trigger minimum 3 second vibration
-  triggerVibration(3200);
+  // 2. Trigger minimum 3.4 seconds vibration
+  triggerVibration(3400);
 
-  // 3. Send system notification to mobile screen
+  // 3. Dispatch system notification to mobile screen
   try {
-    if ('serviceWorker' in navigator) {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) {
-        reg.active?.postMessage({
+      if (reg && reg.active) {
+        reg.active.postMessage({
           type: 'SHOW_HOME_SCREEN_NOTIFICATION',
           title,
           body
@@ -76,14 +130,14 @@ export async function sendHomeScreenNotification(
       }
     }
 
-    if ('Notification' in window && Notification.permission === 'granted') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body,
         icon: '/icon.svg',
-        tag: 'home-screen-shortcut'
+        tag: `masud-telecom-activity-${Date.now()}`
       });
     }
   } catch (err) {
-    console.error('Failed to dispatch notification:', err);
+    console.warn('Failed to dispatch notification:', err);
   }
 }

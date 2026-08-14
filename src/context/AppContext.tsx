@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Transaction, NotificationItem, SystemSettings, TransferMethod } from '../types';
 import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
 import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { amountToWords } from '../utils/numberToWords';
+import { sendHomeScreenNotification, playNotificationSound, triggerVibration } from '../utils/notificationSound';
 
 interface AppContextType {
   currentUser: User | null;
@@ -90,6 +91,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Reference to track already-notified notification IDs so we only alert for new activities
+  const notifiedIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef<boolean>(false);
+
   // Firestore Real-time Listeners & Initial Seeding
   useEffect(() => {
     let unsubscribeUsers: (() => void) | undefined;
@@ -130,16 +135,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('Firestore transactions listener error:', err);
       });
 
-      // 3. Notifications sync
+      // 3. Notifications sync with Real-time Sound & 3-Second Vibration Alert
       const notifsColRef = collection(db, 'notifications');
       unsubscribeNotifs = onSnapshot(notifsColRef, snapshot => {
         if (!snapshot.empty) {
           const fsNotifs: NotificationItem[] = snapshot.docs.map(docSnap => docSnap.data() as NotificationItem);
           setNotifications(fsNotifs);
+
+          // Check if any incoming notification is new and triggers an alert
+          if (initialLoadDoneRef.current) {
+            snapshot.docChanges().forEach(change => {
+              if (change.type === 'added') {
+                const item = change.doc.data() as NotificationItem;
+                if (item && !notifiedIdsRef.current.has(item.id)) {
+                  notifiedIdsRef.current.add(item.id);
+                  // Sound chime & 3+ second vibration!
+                  sendHomeScreenNotification(item.title, item.message);
+                }
+              }
+            });
+          } else {
+            // Populate initial set of IDs on first load
+            fsNotifs.forEach(n => notifiedIdsRef.current.add(n.id));
+            initialLoadDoneRef.current = true;
+          }
         } else {
           INITIAL_NOTIFICATIONS.forEach(n => {
+            notifiedIdsRef.current.add(n.id);
             setDoc(doc(db, 'notifications', n.id), cleanForFirestore(n)).catch(() => {});
           });
+          initialLoadDoneRef.current = true;
         }
       }, err => {
         console.warn('Firestore notifications listener error:', err);
@@ -261,6 +286,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'alert'
     };
     setNotifications(prev => [adminNotif, ...prev]);
+    notifiedIdsRef.current.add(adminNotif.id);
+    sendHomeScreenNotification(adminNotif.title, adminNotif.message);
     setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
 
     return true;
@@ -314,6 +341,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: 'alert'
       };
       setNotifications(prev => [adminNotif, ...prev]);
+      notifiedIdsRef.current.add(adminNotif.id);
+      sendHomeScreenNotification(adminNotif.title, adminNotif.message);
       setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(err => {
         console.warn('Firestore notification error:', err);
       });
@@ -384,6 +413,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txnId: txn.id
     };
     setNotifications(prev => [userNotif, ...prev]);
+    notifiedIdsRef.current.add(userNotif.id);
+    sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
   };
 
@@ -448,6 +479,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txnId: chargeTxn.id
     };
     setNotifications(prev => [notif, ...prev]);
+    notifiedIdsRef.current.add(notif.id);
+    sendHomeScreenNotification(notif.title, notif.message);
     setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
     return {
@@ -530,6 +563,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setNotifications(prev => [notif, ...prev]);
+    notifiedIdsRef.current.add(notif.id);
+    sendHomeScreenNotification(notif.title, notif.message);
     setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
     return {
@@ -616,6 +651,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txnId: txn.id
     };
     setNotifications(prev => [userNotif, ...prev]);
+    notifiedIdsRef.current.add(userNotif.id);
+    sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
   };
 
@@ -655,6 +692,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions(prev => prev.map(t => (t.id === txnId ? updatedTxn : t)));
     setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
 
+    // Notify Admin of edit
+    const adminNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      userId: 'admin',
+      title: 'Send Request Edited',
+      message: `${txn.userName} edited send request to ৳${newAmount.toLocaleString('en-BD')} (${inWords}) for ${updatedTxn.recipientMobile}.`,
+      timestamp: 'Just now',
+      read: false,
+      type: 'alert'
+    };
+    setNotifications(prev => [adminNotif, ...prev]);
+    notifiedIdsRef.current.add(adminNotif.id);
+    sendHomeScreenNotification(adminNotif.title, adminNotif.message);
+    setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
+
     return { success: true, message: 'Transaction updated successfully!' };
   };
 
@@ -682,6 +734,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setTransactions(prev => prev.map(t => (t.id === txnId ? updatedTxn : t)));
     setDoc(doc(db, 'transactions', txnId), cleanForFirestore(updatedTxn)).catch(() => {});
+
+    // Notify Admin of cancellation
+    const cancelNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      userId: 'admin',
+      title: 'Send Request Cancelled',
+      message: `${txn.userName} cancelled their pending send request of ৳${txn.amount.toLocaleString('en-BD')}.`,
+      timestamp: 'Just now',
+      read: false,
+      type: 'warning'
+    };
+    setNotifications(prev => [cancelNotif, ...prev]);
+    notifiedIdsRef.current.add(cancelNotif.id);
+    sendHomeScreenNotification(cancelNotif.title, cancelNotif.message);
+    setDoc(doc(db, 'notifications', cancelNotif.id), cleanForFirestore(cancelNotif)).catch(() => {});
 
     return { success: true, message: 'Send request cancelled successfully.' };
   };
