@@ -5,6 +5,9 @@ export const DEFAULT_ADMIN: User = {
   name: 'Jabir Ahmed',
   email: 'jabir.ahmed10@gmail.com',
   mobile: '+880 1780 000000',
+  location: '',
+  whatsAppNumber: '+880 1780 000000',
+  whatsAppGroupLink: '',
   role: 'admin',
   balance: 500000,
   commissionRate: 3.5,
@@ -188,7 +191,9 @@ export const INITIAL_SETTINGS: SystemSettings = {
   companyName: 'Masud Telecom',
   supportPhone: '+880 1780 000000',
   supportEmail: 'support@masudtelecom.com',
-  currencySymbol: '৳'
+  currencySymbol: '৳',
+  whatsAppNumber: '+880 1780 000000',
+  whatsAppGroupLink: ''
 };
 
 // Password lookup dictionary for authentication

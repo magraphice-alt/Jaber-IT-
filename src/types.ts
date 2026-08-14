@@ -6,6 +6,9 @@ export interface User {
   email: string;
   mobile: string;
   address?: string;
+  location?: string;
+  whatsAppNumber?: string;
+  whatsAppGroupLink?: string;
   role: UserRole;
   balance: number;
   commissionRate: number; // e.g. 2.5 for 2.5%
@@ -58,4 +61,6 @@ export interface SystemSettings {
   supportPhone: string;
   supportEmail: string;
   currencySymbol: string; // '৳'
+  whatsAppNumber?: string;
+  whatsAppGroupLink?: string;
 }

@@ -34,13 +34,22 @@ import {
   Plus,
   AlertTriangle,
   MinusCircle,
-  Download
+  Download,
+  MapPin,
+  MessageSquare,
+  Link as LinkIcon,
+  ExternalLink,
+  Camera,
+  UploadCloud,
+  Share2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
 import { generateStatementPDF } from '../utils/pdfGenerator';
 import { amountToWords } from '../utils/numberToWords';
+import { cleanWhatsAppNumber, getWhatsAppNumberUrl, getWhatsAppGroupUrl } from '../utils/whatsappHelper';
 
 interface AdminDashboardProps {
   onOpenNotifications: () => void;
@@ -73,6 +82,93 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   const [adminEditMobile, setAdminEditMobile] = useState('');
   const [adminEditAddress, setAdminEditAddress] = useState('');
   const [adminProfileMsg, setAdminProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Admin Self Profile Editing State
+  const [isEditingSelfProfile, setIsEditingSelfProfile] = useState(false);
+  const [selfName, setSelfName] = useState(currentUser?.name || 'Jabir Ahmed');
+  const [selfMobile, setSelfMobile] = useState(currentUser?.mobile || '+880 1780 000000');
+  const [selfLocation, setSelfLocation] = useState(currentUser?.location || '');
+  const [selfWhatsAppNumber, setSelfWhatsAppNumber] = useState(currentUser?.whatsAppNumber || settings.whatsAppNumber || '+880 1780 000000');
+  const [selfWhatsAppGroupLink, setSelfWhatsAppGroupLink] = useState(currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '');
+  const [selfAvatarUrl, setSelfAvatarUrl] = useState(currentUser?.avatarUrl || '');
+  const [selfProfileMsg, setSelfProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+
+  // Sync self profile state when currentUser updates
+  React.useEffect(() => {
+    if (currentUser) {
+      setSelfName(currentUser.name || '');
+      setSelfMobile(currentUser.mobile || '');
+      setSelfLocation(currentUser.location || '');
+      setSelfWhatsAppNumber(currentUser.whatsAppNumber || settings.whatsAppNumber || '+880 1780 000000');
+      setSelfWhatsAppGroupLink(currentUser.whatsAppGroupLink || settings.whatsAppGroupLink || '');
+      setSelfAvatarUrl(currentUser.avatarUrl || '');
+    }
+  }, [currentUser, settings.whatsAppNumber, settings.whatsAppGroupLink]);
+
+  const handleAvatarFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit (under 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setSelfProfileMsg({ type: 'error', text: 'Image file is too large. Max 5MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (readerEvt) => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Compress using canvas to ~200x200
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const size = Math.min(img.width, img.height);
+        const startX = (img.width - size) / 2;
+        const startY = (img.height - size) / 2;
+        canvas.width = 250;
+        canvas.height = 250;
+        if (ctx) {
+          ctx.drawImage(img, startX, startY, size, size, 0, 0, 250, 250);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setSelfAvatarUrl(compressedDataUrl);
+        }
+      };
+      img.src = readerEvt.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveSelfProfile = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selfName.trim()) {
+      setSelfProfileMsg({ type: 'error', text: 'Admin full name cannot be empty.' });
+      return;
+    }
+    const res = updateUserProfile({
+      name: selfName.trim(),
+      mobile: selfMobile.trim(),
+      location: selfLocation.trim(),
+      whatsAppNumber: selfWhatsAppNumber.trim(),
+      whatsAppGroupLink: selfWhatsAppGroupLink.trim(),
+      avatarUrl: selfAvatarUrl
+    });
+    if (res.success) {
+      setSelfProfileMsg({ type: 'success', text: 'Admin profile updated successfully!' });
+      setIsEditingSelfProfile(false);
+      setShowAvatarPicker(false);
+      setTimeout(() => setSelfProfileMsg(null), 3000);
+    } else {
+      setSelfProfileMsg({ type: 'error', text: res.message });
+    }
+  };
+
+  const getAdminInitials = (name?: string) => {
+    if (!name) return 'JA';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   const [inlineAdjustAmount, setInlineAdjustAmount] = useState('');
   const [inlineAdjustNote, setInlineAdjustNote] = useState('');
@@ -1710,34 +1806,391 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
         {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && (
           <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 space-y-4">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-blue-900 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-2">
-                JA
+            {selfProfileMsg && (
+              <div
+                className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                  selfProfileMsg.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}
+              >
+                {selfProfileMsg.type === 'success' ? (
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                )}
+                <span>{selfProfileMsg.text}</span>
               </div>
-              <h2 className="text-xl font-bold text-slate-900">{currentUser?.name}</h2>
-              <span className="text-xs font-semibold text-blue-800 uppercase bg-blue-100 px-2 py-0.5 rounded">
-                System Administrator
-              </span>
-            </div>
+            )}
 
-            <div className="text-xs space-y-2 border-t pt-3 border-slate-100">
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Email</span>
-                <span className="font-bold">{currentUser?.email}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Mobile</span>
-                <span className="font-bold">{currentUser?.mobile}</span>
-              </div>
-            </div>
+            {!isEditingSelfProfile ? (
+              <>
+                <div className="text-center">
+                  <div className="relative inline-block mx-auto mb-2">
+                    {currentUser?.avatarUrl ? (
+                      <img
+                        src={currentUser.avatarUrl}
+                        alt={currentUser.name}
+                        referrerPolicy="no-referrer"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-blue-900 shadow-md"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-blue-900 text-white rounded-full flex items-center justify-center text-2xl font-bold shadow-inner">
+                        {getAdminInitials(currentUser?.name)}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelfName(currentUser?.name || '');
+                        setSelfMobile(currentUser?.mobile || '');
+                        setSelfLocation(currentUser?.location || '');
+                        setSelfWhatsAppNumber(currentUser?.whatsAppNumber || settings.whatsAppNumber || '+880 1780 000000');
+                        setSelfWhatsAppGroupLink(currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '');
+                        setSelfAvatarUrl(currentUser?.avatarUrl || '');
+                        setShowAvatarPicker(true);
+                        setIsEditingSelfProfile(true);
+                      }}
+                      className="absolute bottom-0 right-0 p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-md border-2 border-white cursor-pointer transition-transform active:scale-95"
+                      title="Change Photo"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-900">{currentUser?.name || 'Jabir Ahmed'}</h2>
+                  <span className="text-xs font-semibold text-blue-800 uppercase bg-blue-100 px-2.5 py-0.5 rounded inline-block mt-1">
+                    System Administrator
+                  </span>
+                </div>
 
-            <button
-              onClick={logout}
-              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Admin Logout</span>
-            </button>
+                <div className="text-xs space-y-2.5 border-t pt-3 border-slate-100">
+                  {/* Email - Non-Editable / Locked */}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 font-medium">Email</span>
+                    <span className="font-bold text-slate-900 font-mono flex items-center gap-1.5">
+                      {currentUser?.email}
+                      <span title="Email is fixed" className="text-[10px] text-slate-400 font-sans font-normal bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Fixed
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Mobile - One Line */}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 font-medium">Mobile</span>
+                    <span className="font-bold text-slate-900 font-mono">{currentUser?.mobile || ''}</span>
+                  </div>
+
+                  {/* Location - One Line, Blank if empty */}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 font-medium">Location</span>
+                    <span className="font-bold text-slate-900">{currentUser?.location || ''}</span>
+                  </div>
+
+                  {/* WhatsApp Number */}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                      WhatsApp Number
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 font-mono">
+                        {currentUser?.whatsAppNumber || settings.whatsAppNumber || 'Not configured'}
+                      </span>
+                      {(currentUser?.whatsAppNumber || settings.whatsAppNumber) && (
+                        <a
+                          href={getWhatsAppNumberUrl(currentUser?.whatsAppNumber || settings.whatsAppNumber || '', 'Hello Admin, testing WhatsApp integration.')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold rounded text-[10px] flex items-center gap-1 transition-colors"
+                        >
+                          <MessageSquare className="w-2.5 h-2.5" />
+                          Chat
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Group Link */}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <LinkIcon className="w-3 h-3 text-emerald-600" />
+                      WhatsApp Group Link
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700 max-w-[170px] truncate text-[11px]">
+                        {currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink || 'Not configured'}
+                      </span>
+                      {(currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink) && (
+                        <a
+                          href={getWhatsAppGroupUrl(currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold rounded text-[10px] flex items-center gap-1 transition-colors"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" />
+                          Open
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelfName(currentUser?.name || '');
+                      setSelfMobile(currentUser?.mobile || '');
+                      setSelfLocation(currentUser?.location || '');
+                      setSelfWhatsAppNumber(currentUser?.whatsAppNumber || settings.whatsAppNumber || '+880 1780 000000');
+                      setSelfWhatsAppGroupLink(currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '');
+                      setSelfAvatarUrl(currentUser?.avatarUrl || '');
+                      setIsEditingSelfProfile(true);
+                    }}
+                    className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-98 transition-all"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>Edit Profile & WhatsApp Details</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Admin Logout</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleSaveSelfProfile} className="space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-900 flex items-center justify-center font-bold text-xs">
+                      {getAdminInitials(selfName)}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">Edit Admin Profile</h3>
+                      <p className="text-[10px] text-slate-500">Update Profile, Photo & WhatsApp Links</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingSelfProfile(false);
+                      setShowAvatarPicker(false);
+                    }}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Profile Photo / Avatar Change */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-blue-800" />
+                      Profile Picture
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                      className="text-[11px] font-bold text-blue-800 hover:underline cursor-pointer"
+                    >
+                      {showAvatarPicker ? 'Hide Options' : 'Change Photo'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {selfAvatarUrl ? (
+                      <img
+                        src={selfAvatarUrl}
+                        alt="Profile preview"
+                        referrerPolicy="no-referrer"
+                        className="w-12 h-12 rounded-full object-cover border-2 border-blue-900 shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-blue-900 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-inner">
+                        {getAdminInitials(selfName)}
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-1">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-lg text-xs cursor-pointer shadow-xs transition-colors">
+                        <UploadCloud className="w-3.5 h-3.5 text-blue-900" />
+                        <span>Upload from device</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      {selfAvatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setSelfAvatarUrl('')}
+                          className="block text-[10px] text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Remove custom photo (use initials)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {showAvatarPicker && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">Choose Preset Avatar</span>
+                      <div className="flex gap-2 items-center overflow-x-auto pb-1">
+                        {[
+                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+                          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200',
+                          'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200',
+                          'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=200'
+                        ].map((url, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setSelfAvatarUrl(url)}
+                            className={`relative rounded-full shrink-0 border-2 transition-all p-0.5 ${
+                              selfAvatarUrl === url ? 'border-blue-900 scale-105' : 'border-transparent hover:border-slate-300'
+                            }`}
+                          >
+                            <img
+                              src={url}
+                              alt={`Preset ${idx + 1}`}
+                              referrerPolicy="no-referrer"
+                              className="w-9 h-9 rounded-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Name Field - Editable */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={selfName}
+                    onChange={e => setSelfName(e.target.value)}
+                    placeholder="e.g. Jabir Ahmed"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                </div>
+
+                {/* Email Field - Strictly Non-Editable / Locked */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                      Email
+                    </label>
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1 font-medium">
+                      <Lock className="w-2.5 h-2.5 text-slate-400" /> Non-editable
+                    </span>
+                  </div>
+                  <input
+                    type="email"
+                    disabled
+                    readOnly
+                    value={currentUser?.email || ''}
+                    className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-500 cursor-not-allowed select-none"
+                  />
+                </div>
+
+                {/* Mobile Field - Editable */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Mobile
+                  </label>
+                  <input
+                    type="text"
+                    value={selfMobile}
+                    onChange={e => setSelfMobile(e.target.value)}
+                    placeholder="e.g. +880 1780 000000"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                </div>
+
+                {/* Location Field - One Line, Editable */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={selfLocation}
+                    onChange={e => setSelfLocation(e.target.value)}
+                    placeholder="e.g. Dhaka, Bangladesh (or leave blank)"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                </div>
+
+                {/* WhatsApp Number Field - Editable */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                    WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={selfWhatsAppNumber}
+                    onChange={e => setSelfWhatsAppNumber(e.target.value)}
+                    placeholder="e.g. +880 1780 000000 or 01780000000"
+                    className="w-full p-2.5 bg-slate-50 border border-emerald-200 rounded-xl text-xs font-mono font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Send & deposit operations automatically route to this WhatsApp number.
+                  </p>
+                </div>
+
+                {/* WhatsApp Group Link Field - Editable */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                    <LinkIcon className="w-3 h-3 text-emerald-600" />
+                    WhatsApp Group Link
+                  </label>
+                  <input
+                    type="url"
+                    value={selfWhatsAppGroupLink}
+                    onChange={e => setSelfWhatsAppGroupLink(e.target.value)}
+                    placeholder="e.g. https://chat.whatsapp.com/..."
+                    className="w-full p-2.5 bg-slate-50 border border-emerald-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Send & deposit operations can also be sent directly to this WhatsApp group.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-900 hover:bg-blue-800 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-98 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Profile Changes</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingSelfProfile(false);
+                      setShowAvatarPicker(false);
+                    }}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
       </div>

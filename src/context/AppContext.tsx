@@ -38,7 +38,8 @@ interface AppContextType {
   deleteUserAccount: (userId: string) => { success: boolean; message?: string };
   chargeUserBalance: (userId: string, chargeAmount: number, reason?: string) => { success: boolean; message: string };
   manualAdjustUserBalance: (userId: string, action: 'credit' | 'debit', amount: number, note?: string) => { success: boolean; message: string };
-  updateUserProfile: (data: { name?: string; mobile?: string; address?: string; avatarUrl?: string }, targetUserId?: string) => { success: boolean; message: string };
+  updateUserProfile: (data: { name?: string; mobile?: string; address?: string; location?: string; whatsAppNumber?: string; whatsAppGroupLink?: string; avatarUrl?: string }, targetUserId?: string) => { success: boolean; message: string };
+  updateSystemSettings: (newSettings: Partial<SystemSettings>) => void;
   changeUserPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
@@ -625,7 +626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserProfile = (
-    data: { name?: string; mobile?: string; address?: string; avatarUrl?: string },
+    data: { name?: string; mobile?: string; address?: string; location?: string; whatsAppNumber?: string; whatsAppGroupLink?: string; avatarUrl?: string },
     targetUserId?: string
   ): { success: boolean; message: string } => {
     const userIdToUpdate = targetUserId || currentUser?.id;
@@ -637,6 +638,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newName = data.name !== undefined ? data.name.trim() : targetUser.name;
     const newMobile = data.mobile !== undefined ? data.mobile.trim() : targetUser.mobile;
     const newAddress = data.address !== undefined ? data.address.trim() : targetUser.address;
+    const newLocation = data.location !== undefined ? data.location.trim() : (targetUser.location || '');
+    const newWhatsAppNumber = data.whatsAppNumber !== undefined ? data.whatsAppNumber.trim() : (targetUser.whatsAppNumber || '');
+    const newWhatsAppGroupLink = data.whatsAppGroupLink !== undefined ? data.whatsAppGroupLink.trim() : (targetUser.whatsAppGroupLink || '');
     const newAvatar = data.avatarUrl !== undefined ? data.avatarUrl : targetUser.avatarUrl;
 
     const updatedUser: User = {
@@ -644,6 +648,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: newName,
       mobile: newMobile,
       address: newAddress,
+      location: newLocation,
+      whatsAppNumber: newWhatsAppNumber,
+      whatsAppGroupLink: newWhatsAppGroupLink,
       avatarUrl: newAvatar
     };
 
@@ -653,10 +660,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setDoc(doc(db, 'users', userIdToUpdate), cleanForFirestore(updatedUser)).catch(() => {});
 
+    // If updating Admin profile, also sync system settings for WhatsApp
+    if (updatedUser.role === 'admin') {
+      setSettings(prev => {
+        const updated = {
+          ...prev,
+          whatsAppNumber: newWhatsAppNumber,
+          whatsAppGroupLink: newWhatsAppGroupLink
+        };
+        setDoc(doc(db, 'settings', 'main'), cleanForFirestore(updated)).catch(() => {});
+        return updated;
+      });
+    }
+
     // Show 1-second success display
     triggerOperationSuccess('Your operation successful!', 'Profile updated.');
 
     return { success: true, message: 'Profile updated successfully!' };
+  };
+
+  const updateSystemSettings = (newSettings: Partial<SystemSettings>) => {
+    setSettings(prev => {
+      const updated = { ...prev, ...newSettings };
+      setDoc(doc(db, 'settings', 'main'), cleanForFirestore(updated)).catch(() => {});
+      return updated;
+    });
+    triggerOperationSuccess('Your operation successful!', 'System settings updated.');
   };
 
   const changeUserPassword = (oldPass: string, newPass: string): { success: boolean; message: string } => {
@@ -920,6 +949,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         chargeUserBalance,
         manualAdjustUserBalance,
         updateUserProfile,
+        updateSystemSettings,
         changeUserPassword,
         markNotificationRead,
         clearNotifications
