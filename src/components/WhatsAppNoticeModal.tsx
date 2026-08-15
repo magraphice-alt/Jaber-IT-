@@ -7,8 +7,9 @@ import {
   ExternalLink,
   Users,
   Send,
-  Sparkles,
-  CheckCircle2
+  Share2,
+  CheckCircle2,
+  Info
 } from 'lucide-react';
 import {
   getWhatsAppGroupUrl,
@@ -39,6 +40,7 @@ export const WhatsAppNoticeModal: React.FC<WhatsAppNoticeModalProps> = ({
   autoCopied = true
 }) => {
   const [copied, setCopied] = useState(autoCopied);
+  const [showPasteToast, setShowPasteToast] = useState(false);
 
   if (!isOpen) return null;
 
@@ -54,14 +56,38 @@ export const WhatsAppNoticeModal: React.FC<WhatsAppNoticeModalProps> = ({
   const adminChatUrl = whatsAppNumber ? getWhatsAppNumberUrl(whatsAppNumber, formattedMessage) : '';
   const generalShareUrl = getWhatsAppShareUrl(formattedMessage);
 
+  // Open direct group invite link with guaranteed synchronous copy
+  const handleOpenGroupLink = async () => {
+    // 1. Guaranteed synchronous clipboard copy on user gesture
+    await copyToClipboardSafe(formattedMessage);
+    setCopied(true);
+    setShowPasteToast(true);
+    setTimeout(() => setShowPasteToast(false), 8000);
+
+    // 2. Open group URL
+    const targetUrl = groupUrl || generalShareUrl;
+    if (targetUrl && typeof window !== 'undefined') {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  // Direct WhatsApp Share (with pre-filled summary message)
+  const handleDirectShare = async () => {
+    await copyToClipboardSafe(formattedMessage);
+    setCopied(true);
+    if (typeof window !== 'undefined') {
+      window.open(generalShareUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-emerald-100 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-emerald-100 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 px-5 py-4 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white backdrop-blur-xs shadow-inner">
-              <MessageCircle className="w-6 h-6" />
+              <Users className="w-6 h-6" />
             </div>
             <div>
               <h3 className="font-bold text-base leading-tight">{title}</h3>
@@ -83,7 +109,7 @@ export const WhatsAppNoticeModal: React.FC<WhatsAppNoticeModalProps> = ({
             <div className="flex items-center gap-2 text-emerald-800 text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
-                {copied ? 'Notice copied to clipboard!' : 'Ready to share on WhatsApp'}
+                {copied ? 'Summary text copied to clipboard!' : 'Summary ready to send to Admin Group'}
               </span>
             </div>
             <button
@@ -95,112 +121,92 @@ export const WhatsAppNoticeModal: React.FC<WhatsAppNoticeModalProps> = ({
             </button>
           </div>
 
+          {showPasteToast && (
+            <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                Opening Admin Group! Summary is <strong>copied</strong> &mdash; simply long-press and <strong>Paste</strong> in the group chat.
+              </span>
+            </div>
+          )}
+
           {/* Formatted Message Preview */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                WhatsApp Notice Preview:
+                Request Summary Notice:
               </span>
             </div>
-            <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl text-xs font-mono whitespace-pre-wrap leading-relaxed shadow-inner max-h-48 overflow-y-auto border border-slate-800 selection:bg-emerald-600">
+            <div className="bg-slate-900 text-slate-100 p-3 rounded-xl text-[11px] font-mono whitespace-pre-wrap leading-relaxed shadow-inner max-h-36 overflow-y-auto border border-slate-800 selection:bg-emerald-600">
               {formattedMessage}
             </div>
           </div>
 
-          {/* WhatsApp Destination Buttons */}
+          {/* WhatsApp Action Buttons */}
           <div className="space-y-2 pt-1">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-              Send or Post To:
+              Send to Setup Admin WhatsApp Group:
             </span>
 
-            {/* Primary Action: Send to WhatsApp Group Button */}
-            {groupUrl ? (
-              <a
-                href={groupUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleCopy}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-between shadow-md active:scale-[0.98] transition-all group cursor-pointer border border-emerald-500"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="text-left">
-                    <div className="leading-tight font-extrabold text-sm">Send to WhatsApp Group</div>
-                    <div className="text-[10px] text-emerald-100 font-medium">
-                      Admin Profile WhatsApp Group &bull; Tap to Send
-                    </div>
+            {/* Primary Action: Open Setup Admin WhatsApp Group Link */}
+            <button
+              type="button"
+              onClick={handleOpenGroupLink}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-between shadow-md active:scale-[0.98] transition-all group cursor-pointer border border-emerald-500"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="leading-tight font-extrabold text-sm">Open Admin Group Link</div>
+                  <div className="text-[10px] text-emerald-100 font-medium">
+                    Auto-copies summary &bull; Opens setup Admin Group to paste & send
                   </div>
                 </div>
-                <div className="flex items-center gap-1 bg-white/20 px-2.5 py-1 rounded-lg text-xs">
-                  <span>Open</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
-                </div>
-              </a>
-            ) : (
-              <a
-                href={adminChatUrl || generalShareUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={handleCopy}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-between shadow-md active:scale-[0.98] transition-all group cursor-pointer border border-emerald-500"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                    <MessageCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="text-left">
-                    <div className="leading-tight font-extrabold text-sm">Send to WhatsApp Group / Admin</div>
-                    <div className="text-[10px] text-emerald-100 font-medium">
-                      Tap to open WhatsApp &bull; Ready to Post
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 bg-white/20 px-2.5 py-1 rounded-lg text-xs">
-                  <span>Open</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
-                </div>
-              </a>
-            )}
+              </div>
+              <div className="flex items-center gap-1 bg-white/20 px-2.5 py-1 rounded-lg text-xs">
+                <span>Join / Open</span>
+                <ExternalLink className="w-3.5 h-3.5 text-white group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </button>
 
-            {/* Additional Options */}
-            {adminChatUrl && groupUrl && (
+            {/* Optional Secondary Action 1: Pre-filled WhatsApp Share */}
+            <button
+              type="button"
+              onClick={handleDirectShare}
+              className="w-full bg-teal-700 hover:bg-teal-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-between shadow-xs active:scale-98 transition-all group cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Share2 className="w-3.5 h-3.5 text-teal-200" />
+                <span>Share with Summary Pre-filled (Select Group in WhatsApp)</span>
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-teal-200" />
+            </button>
+
+            {/* Optional Secondary Action 2: Direct Admin Number Chat */}
+            {adminChatUrl && (
               <a
                 href={adminChatUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={handleCopy}
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-between shadow-xs active:scale-98 transition-all group cursor-pointer"
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-between shadow-xs active:scale-98 transition-all group cursor-pointer"
               >
                 <div className="flex items-center gap-2">
-                  <Send className="w-3.5 h-3.5 text-white" />
-                  <span>Send Directly to Admin WhatsApp Chat ({whatsAppNumber})</span>
+                  <Send className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Send Direct to Admin WhatsApp ({whatsAppNumber})</span>
                 </div>
-                <ExternalLink className="w-3.5 h-3.5 text-teal-200" />
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
               </a>
             )}
-
-            {/* 3. General Share Button */}
-            <a
-              href={generalShareUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-between active:scale-98 transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-emerald-400" />
-                <span>Share to Any WhatsApp Contact / Other Group</span>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-            </a>
           </div>
         </div>
 
         {/* Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
           <span className="text-[10px] text-slate-500 italic">
-            Compatible with Android, iPhone, iPad & Web
+            Compatible with WhatsApp Mobile & Web
           </span>
           <button
             type="button"
@@ -214,3 +220,4 @@ export const WhatsAppNoticeModal: React.FC<WhatsAppNoticeModalProps> = ({
     </div>
   );
 };
+

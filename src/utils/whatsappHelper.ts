@@ -53,34 +53,58 @@ export function getWhatsAppShareUrl(text: string): string {
 }
 
 /**
- * Copies text safely to clipboard across all browser types (Desktop, iOS Safari, Android)
+ * Copies text safely to clipboard across all browser types (Desktop, iOS Safari, Android, Mobile Webviews)
  */
 export async function copyToClipboardSafe(text: string): Promise<boolean> {
+  if (!text) return false;
+  let copied = false;
+
+  // Method 1: DOM selection with iOS Safari & Android support
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.setAttribute('readonly', '');
+    el.style.position = 'fixed';
+    el.style.left = '0';
+    el.style.top = '0';
+    el.style.width = '100px';
+    el.style.height = '100px';
+    el.style.opacity = '0.01';
+    el.style.zIndex = '99999';
+    el.style.fontSize = '16px'; // Prevents iOS zooming on focus
+    document.body.appendChild(el);
+
+    if (navigator.userAgent.match(/ipad|ipod|iphone/i)) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      el.setSelectionRange(0, 999999);
+    } else {
+      el.focus();
+      el.select();
+    }
+
+    copied = document.execCommand('copy');
+    document.body.removeChild(el);
+  } catch (err) {
+    console.warn('execCommand copy fallback error:', err);
+  }
+
+  // Method 2: Modern navigator.clipboard API
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
-      return true;
+      copied = true;
     }
-  } catch {
-    // fallback below
+  } catch (err) {
+    console.warn('navigator.clipboard error:', err);
   }
 
-  try {
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    const successful = document.execCommand('copy');
-    document.body.removeChild(textArea);
-    return successful;
-  } catch (err) {
-    console.warn('Clipboard copy error:', err);
-    return false;
-  }
+  return copied;
 }
 
 /**
