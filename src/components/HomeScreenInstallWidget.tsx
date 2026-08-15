@@ -48,11 +48,6 @@ export const HomeScreenInstallWidget: React.FC = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
       handleDismiss();
-      // Trigger notification + sound + 3+ second vibration!
-      sendHomeScreenNotification(
-        '🎉 Masud Telecom Added to Home Screen!',
-        'Web app shortcut is now installed on your home screen. Real-time activity notifications are enabled!'
-      );
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -75,17 +70,12 @@ export const HomeScreenInstallWidget: React.FC = () => {
 
   const handleInstallClick = async () => {
     await requestNotificationPermission();
-    playNotificationSound();
 
     if (deferredPrompt) {
       try {
         deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
         if (choice.outcome === 'accepted') {
-          await sendHomeScreenNotification(
-            '🎉 Masud Telecom Added to Home Screen!',
-            'Shortcut saved to your phone. Real-time sound and vibration alerts are enabled!'
-          );
           handleDismiss();
         }
         setDeferredPrompt(null);

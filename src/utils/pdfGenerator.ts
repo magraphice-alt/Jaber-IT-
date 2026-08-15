@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Transaction, User } from '../types';
+import { formatBDDateTime, getBDDateOnly } from './timeHelper';
 
 interface GeneratePDFParams {
   user: {
@@ -57,10 +58,7 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
   doc.setTextColor(30, 58, 138);
   doc.text('ACCOUNT STATEMENT', pageWidth - 14, 20, { align: 'right' });
 
-  const generatedDateStr = new Date().toLocaleString('en-BD', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  });
+  const generatedDateStr = formatBDDateTime(new Date(), true);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
@@ -146,10 +144,7 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
   const tableData = transactions.map((t, index) => {
     const isSend = t.type === 'send';
     const isCharge = t.type === 'charge';
-    const dateStr = new Date(t.createdAt).toLocaleString('en-BD', {
-      dateStyle: 'short',
-      timeStyle: 'short'
-    });
+    const dateStr = formatBDDateTime(t.createdAt, false);
     const typeLabel = isCharge ? 'COMMISSION' : isSend ? 'SEND' : 'DEPOSIT';
     const targetLabel = t.recipientMobile ? `${t.method.toUpperCase()} (${t.recipientMobile})` : t.method.toUpperCase();
     const pinStr = t.adminPin ? `Key: ${t.adminPin}` : '-';

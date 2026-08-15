@@ -1,10 +1,32 @@
-// Notification, Sound & 3+ Second Vibration Utility for Mobile Home Screen & Real-time Activities
+// Notification, Sound & Vibration Utility for Mobile Home Screen & Real-time Activities
 
 let sharedAudioCtx: AudioContext | null = null;
+let isAppClosing = false;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    isAppClosing = true;
+    if (sharedAudioCtx) {
+      try {
+        sharedAudioCtx.close().catch(() => {});
+      } catch {}
+    }
+  });
+
+  window.addEventListener('pagehide', () => {
+    isAppClosing = true;
+    if (sharedAudioCtx) {
+      try {
+        sharedAudioCtx.close().catch(() => {});
+      } catch {}
+    }
+  });
+}
 
 function getAudioContext(): AudioContext | null {
+  if (isAppClosing) return null;
   try {
-    if (!sharedAudioCtx) {
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (AudioContextClass) {
         sharedAudioCtx = new AudioContextClass();
@@ -20,24 +42,12 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-// Automatically unlock audio on user touch, tap, key, or scroll
-if (typeof window !== 'undefined') {
-  const unlockAudio = () => {
-    const ctx = getAudioContext();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  };
-  ['click', 'touchstart', 'touchend', 'keydown', 'scroll'].forEach(evt => {
-    window.addEventListener(evt, unlockAudio, { passive: true, capture: true });
-  });
-}
-
 /**
- * Plays a loud, crystal-clear banking alert chime with dual oscillators and harmonics
+ * Plays a banking alert chime with dual oscillators and harmonics
  * Engineered to cut through mobile phone speakers clearly.
  */
 export function playNotificationSound(): void {
+  if (isAppClosing) return;
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -138,6 +148,7 @@ export function playSuccessChime(): void {
  * Pattern: 600ms vibrate, 150ms rest, 600ms vibrate, 150ms rest, 600ms vibrate, 150ms rest, 600ms vibrate (~3.45s)
  */
 export function triggerVibration(durationMs: number = 3400): void {
+  if (isAppClosing) return;
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate([600, 150, 600, 150, 600, 150, 600]);
@@ -151,6 +162,7 @@ export function triggerVibration(durationMs: number = 3400): void {
  * Trigger quick tactile feedback (60ms) for button taps / operations
  */
 export function triggerQuickHaptic(): void {
+  if (isAppClosing) return;
   try {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate(60);
@@ -187,6 +199,7 @@ export async function sendHomeScreenNotification(
   title: string = 'Masud Telecom: Account Notification',
   body: string = 'Activity updated in your Masud Telecom account.'
 ): Promise<void> {
+  if (isAppClosing) return;
   const cleanTitle = cleanNotificationTitle(title);
 
   // 1. Play loud audible chime

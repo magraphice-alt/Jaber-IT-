@@ -24,8 +24,11 @@ import {
   Camera,
   Upload,
   Image as ImageIcon,
-  MapPin
+  MapPin,
+  Users,
+  ExternalLink
 } from 'lucide-react';
+import { getWhatsAppGroupUrl, getWhatsAppNumberUrl } from '../utils/whatsappHelper';
 
 interface ProfileViewProps {
   onBack: () => void;
@@ -34,7 +37,11 @@ interface ProfileViewProps {
 type ModalType = 'edit_profile' | 'security' | 'language' | 'notifications' | 'help' | 'contact' | 'change_avatar' | null;
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ onBack }) => {
-  const { currentUser, updateUserProfile, changeUserPassword, logout } = useApp();
+  const { currentUser, updateUserProfile, changeUserPassword, logout, users, settings } = useApp();
+
+  const adminUser = users.find(u => u.role === 'admin');
+  const adminWhatsAppNumber = adminUser?.whatsAppNumber || settings.whatsAppNumber || '+880 1793-567814';
+  const adminWhatsAppGroup = adminUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '';
 
   // Active modal
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -908,22 +915,37 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onBack }) => {
             </p>
 
             <div className="space-y-2.5">
-              <a
-                href="https://api.whatsapp.com/send?phone=+8801700000000"
-                target="_blank"
-                rel="noreferrer"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition-colors shadow-xs"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>WhatsApp Live Chat</span>
-              </a>
+              {adminWhatsAppGroup && (
+                <a
+                  href={getWhatsAppGroupUrl(adminWhatsAppGroup)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition-colors shadow-xs"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Join Official WhatsApp Group</span>
+                  <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-80" />
+                </a>
+              )}
+
+              {adminWhatsAppNumber && (
+                <a
+                  href={getWhatsAppNumberUrl(adminWhatsAppNumber, 'Hello Masud Telecom Support, I need assistance with my account.')}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition-colors shadow-xs"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp Live Chat ({adminWhatsAppNumber})</span>
+                </a>
+              )}
 
               <a
-                href="tel:+8801700000000"
+                href={`tel:${adminWhatsAppNumber ? adminWhatsAppNumber.replace(/\s+/g, '') : '+8801700000000'}`}
                 className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold p-3 rounded-2xl flex items-center justify-center gap-2 text-xs transition-colors shadow-xs"
               >
                 <Phone className="w-4 h-4" />
-                <span>Call Hotline: +880 1700 000000</span>
+                <span>Call Helpline: {adminWhatsAppNumber || '+880 1700 000000'}</span>
               </a>
             </div>
           </div>

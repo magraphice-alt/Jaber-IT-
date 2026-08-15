@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2 } from 'lucide-react';
+import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2, Clock } from 'lucide-react';
 import { UserTab } from './UserNavbar';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
 import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
 import { Transaction } from '../types';
+import { isBDToday, formatBDDateTime, getLiveBDClock, getBDTodayRange } from '../utils/timeHelper';
 
 interface UserDashboardProps {
   onTabChange: (tab: UserTab) => void;
@@ -19,20 +20,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
   const [isChargeModalOpen, setIsChargeModalOpen] = useState(false);
 
+  // Live Bangladesh Clock (BST)
+  const [bdClock, setBdClock] = useState(getLiveBDClock());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setBdClock(getLiveBDClock());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const unreadCount = notifications.filter(
     n => !n.read && (n.userId === currentUser?.id || n.userId === 'all')
   ).length;
 
-  // Compute Today's Send
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
+  // Compute Today's Send strictly starting from Bangladeshi 6:00 AM
   const todaySends = transactions.filter(
     t =>
       t.userId === currentUser?.id &&
       t.type === 'send' &&
       t.status === 'approved' &&
-      new Date(t.createdAt) >= todayStart
+      isBDToday(t.createdAt)
   );
 
   const todaySendTotal = todaySends.reduce((sum, t) => sum + t.amount, 0);
@@ -77,6 +85,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
 
       {/* Main Content Area */}
       <div className="p-4 space-y-4">
+        {/* Bangladesh Time & 6 AM Cycle Bar */}
+        <div className="bg-slate-900 text-white px-3.5 py-2 rounded-xl flex items-center justify-between text-xs border border-slate-800 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <div className="flex items-center gap-1.5 font-bold">
+                <span>🇧🇩 BD Time:</span>
+                <span className="font-mono text-emerald-300">{bdClock.time12}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium">Daily stats cycle: 6:00 AM BST</p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md font-semibold border border-slate-700">
+            {bdClock.dateMedium}
+          </span>
+        </div>
+
         {/* Available Balance Card */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
@@ -193,11 +218,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
                         {t.comment || (isCharge ? 'Commission Charge / Service Fee' : isSend ? `Transfer to ${t.recipientMobile}` : 'Deposit Request')}
                       </div>
                       <div className="text-xs text-slate-600 mt-0.5">
-                        {new Date(t.createdAt).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                        , {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatBDDateTime(t.createdAt, false)}
                       </div>
                       {t.adminPin && (
                         <div className="flex items-center gap-1.5 mt-1">

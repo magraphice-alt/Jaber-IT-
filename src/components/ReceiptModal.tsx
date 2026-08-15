@@ -4,6 +4,7 @@ import { toJpeg } from 'html-to-image';
 import { Transaction } from '../types';
 import { useApp } from '../context/AppContext';
 import { amountToWords } from '../utils/numberToWords';
+import { formatBDDateTime } from '../utils/timeHelper';
 import {
   X,
   Printer,
@@ -62,10 +63,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 
   if (!transaction) return null;
 
-  const receiptDate = new Date(transaction.approvedAt || transaction.createdAt).toLocaleString('en-BD', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  });
+  const receiptDate = formatBDDateTime(transaction.approvedAt || transaction.createdAt, true);
 
   const formattedMessage = `
 📄 *OFFICIAL MONEY RECEIPT - ${receiptUserName.toUpperCase()}*

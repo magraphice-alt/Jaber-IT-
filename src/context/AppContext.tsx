@@ -130,17 +130,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 1000);
   };
 
-  // Reference to track already-notified notification IDs so we only alert for new activities
+  // Reference to track already-notified notification IDs so we only alert for genuine real-time activities
   const notifiedIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef<boolean>(false);
+  const appMountTimestampRef = useRef<number>(Date.now());
+  const currentUserRef = useRef<User | null>(currentUser);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   // Firestore Real-time Listeners & Initial Seeding
   useEffect(() => {
     let unsubscribeUsers: (() => void) | undefined;
     let unsubscribeTxns: (() => void) | undefined;
     let unsubscribeNotifs: (() => void) | undefined;
+    let unsubscribeSettings: (() => void) | undefined;
 
     try {
+      // 0. Settings sync
+      const settingsDocRef = doc(db, 'settings', 'main');
+      unsubscribeSettings = onSnapshot(settingsDocRef, docSnap => {
+        if (docSnap.exists()) {
+          const fsSettings = docSnap.data() as SystemSettings;
+          setSettings(prev => ({ ...prev, ...fsSettings }));
+        } else {
+          setDoc(settingsDocRef, cleanForFirestore(INITIAL_SETTINGS)).catch(() => {});
+        }
+      }, err => {
+        console.warn('Firestore settings listener error:', err);
+      });
+
       // 1. Users sync
       const usersColRef = collection(db, 'users');
       unsubscribeUsers = onSnapshot(usersColRef, snapshot => {
@@ -174,7 +194,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('Firestore transactions listener error:', err);
       });
 
-      // 3. Notifications sync with Real-time Sound & 3-Second Vibration Alert
+      // 3. Notifications sync with Real-time Sound Alert ONLY for incoming new events (never on open/close/reload)
       const notifsColRef = collection(db, 'notifications');
       unsubscribeNotifs = onSnapshot(notifsColRef, snapshot => {
         if (!snapshot.empty) {
@@ -186,20 +206,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
           setNotifications(fsNotifs);
 
-          // Check if any incoming notification is new and triggers an alert
-          if (initialLoadDoneRef.current) {
+          // Check if any incoming notification is genuinely new (created after app session started)
+          if (initialLoadDoneRef.current && !snapshot.metadata.hasPendingWrites && !snapshot.metadata.fromCache) {
             snapshot.docChanges().forEach(change => {
               if (change.type === 'added') {
                 const item = change.doc.data() as NotificationItem;
                 if (item && !notifiedIdsRef.current.has(item.id)) {
                   notifiedIdsRef.current.add(item.id);
-                  // Sound chime & 3+ second vibration & mobile tray notification
-                  sendHomeScreenNotification(item.title, item.message);
+
+                  // Extract timestamp from notif ID (e.g. notif-1700000000000)
+                  const parsedTime = Number(item.id.replace('notif-', ''));
+                  const notifTime = !isNaN(parsedTime) && parsedTime > 1000000 ? parsedTime : Date.now();
+
+                  // ONLY notify if created strictly after this app session loaded (with 3s buffer)
+                  if (notifTime > appMountTimestampRef.current + 3000) {
+                    const activeUser = currentUserRef.current;
+                    const isRelevant = activeUser && (
+                      item.userId === activeUser.id ||
+                      (activeUser.role === 'admin' && (item.userId === 'admin' || item.userId === 'all'))
+                    );
+                    if (isRelevant) {
+                      sendHomeScreenNotification(item.title, item.message);
+                    }
+                  }
                 }
               }
             });
           } else {
-            // Populate initial set of IDs on first load
+            // Populate initial set of IDs on first load and mark session ready
             fsNotifs.forEach(n => notifiedIdsRef.current.add(n.id));
             initialLoadDoneRef.current = true;
           }
@@ -218,6 +252,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     return () => {
+      if (unsubscribeSettings) unsubscribeSettings();
       if (unsubscribeUsers) unsubscribeUsers();
       if (unsubscribeTxns) unsubscribeTxns();
       if (unsubscribeNotifs) unsubscribeNotifs();
@@ -328,7 +363,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [adminNotif, ...prev]);
     notifiedIdsRef.current.add(adminNotif.id);
-    sendHomeScreenNotification(adminNotif.title, adminNotif.message);
     setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
 
     // Show 1-second success display
@@ -386,7 +420,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setNotifications(prev => [adminNotif, ...prev]);
       notifiedIdsRef.current.add(adminNotif.id);
-      sendHomeScreenNotification(adminNotif.title, adminNotif.message);
       setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(err => {
         console.warn('Firestore notification error:', err);
       });
@@ -461,7 +494,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [userNotif, ...prev]);
     notifiedIdsRef.current.add(userNotif.id);
-    sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
 
     // Show 1-second success display
@@ -530,7 +562,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [notif, ...prev]);
     notifiedIdsRef.current.add(notif.id);
-    sendHomeScreenNotification(notif.title, notif.message);
     setDoc(doc(db, 'notifications', notif.id), cleanForFirestore(notif)).catch(() => {});
 
     // Show 1-second success display
@@ -734,7 +765,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [userNotif, ...prev]);
     notifiedIdsRef.current.add(userNotif.id);
-    sendHomeScreenNotification(userNotif.title, userNotif.message);
     setDoc(doc(db, 'notifications', userNotif.id), cleanForFirestore(userNotif)).catch(() => {});
 
     // Show 1-second success display
@@ -789,7 +819,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [adminNotif, ...prev]);
     notifiedIdsRef.current.add(adminNotif.id);
-    sendHomeScreenNotification(adminNotif.title, adminNotif.message);
     setDoc(doc(db, 'notifications', adminNotif.id), cleanForFirestore(adminNotif)).catch(() => {});
 
     // Show 1-second success display
@@ -835,7 +864,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications(prev => [cancelNotif, ...prev]);
     notifiedIdsRef.current.add(cancelNotif.id);
-    sendHomeScreenNotification(cancelNotif.title, cancelNotif.message);
     setDoc(doc(db, 'notifications', cancelNotif.id), cleanForFirestore(cancelNotif)).catch(() => {});
 
     // Show 1-second success display

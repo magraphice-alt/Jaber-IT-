@@ -1,5 +1,5 @@
 // Masud Telecom Service Worker for Mobile Notifications & Home Screen Shortcuts
-const CACHE_NAME = 'masud-telecom-v3';
+const CACHE_NAME = 'masud-telecom-v4';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -41,7 +41,7 @@ self.addEventListener('message', (event) => {
       tag: `masud-txn-${Date.now()}`,
       requireInteraction: false,
       data: {
-        url: event.data.url || '/?tab=send',
+        url: event.data.url || '/',
         dateOfArrival: Date.now()
       },
       actions: [
@@ -58,15 +58,12 @@ self.addEventListener('message', (event) => {
 // Handle tap on system notification in mobile notification bar
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/?tab=send';
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
-          if (client.url && !client.url.includes(targetUrl)) {
-            client.navigate(targetUrl);
-          }
           return client.focus();
         }
       }

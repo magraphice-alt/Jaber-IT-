@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ShieldCheck,
@@ -49,7 +49,9 @@ import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
 import { generateStatementPDF } from '../utils/pdfGenerator';
 import { amountToWords } from '../utils/numberToWords';
-import { cleanWhatsAppNumber, getWhatsAppNumberUrl, getWhatsAppGroupUrl } from '../utils/whatsappHelper';
+import { cleanWhatsAppNumber, getWhatsAppNumberUrl, getWhatsAppGroupUrl, formatApprovalMessage, triggerWhatsAppAutoSend, copyToClipboardSafe } from '../utils/whatsappHelper';
+import { WhatsAppNoticeModal } from './WhatsAppNoticeModal';
+import { isBDToday, formatBDDateTime, getLiveBDClock, matchesBDDateFilter } from '../utils/timeHelper';
 
 interface AdminDashboardProps {
   onOpenNotifications: () => void;
@@ -220,21 +222,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     setTimeout(() => setCopiedNumber(null), 2000);
   };
 
+  // Admin WhatsApp Auto-Notice State
+  const [showAdminWhatsAppModal, setShowAdminWhatsAppModal] = useState(false);
+  const [adminWhatsAppNotice, setAdminWhatsAppNotice] = useState<string>('');
+  const [adminWhatsAppNoticeTitle, setAdminWhatsAppNoticeTitle] = useState<string>('Transaction Approved Notice');
+
   const openApproveModal = (txnId: string) => {
     setApprovingTxnId(txnId);
     setAdminPin('');
     setPinError(null);
   };
 
-  const handleConfirmApproveWithPin = (txnId: string) => {
+  const handleConfirmApproveWithPin = async (txnId: string) => {
     if (!adminPin || adminPin.trim().length !== 4) {
       setPinError('Please enter a valid 4-digit PIN');
       return;
     }
-    approveTransaction(txnId, adminPin.trim());
+    const cleanPin = adminPin.trim();
+    const txnToApprove = transactions.find(t => t.id === txnId);
+
+    approveTransaction(txnId, cleanPin);
     setApprovingTxnId(null);
     setAdminPin('');
     setPinError(null);
+
+    if (txnToApprove) {
+      const approvedTxn: Transaction = {
+        ...txnToApprove,
+        adminPin: cleanPin,
+        status: 'approved',
+        approvedAt: new Date().toISOString()
+      };
+
+      const waNotice = formatApprovalMessage(approvedTxn, currentUser?.name || 'Admin');
+      setAdminWhatsAppNotice(waNotice);
+      setAdminWhatsAppNoticeTitle(`${txnToApprove.type.toUpperCase()} Approval Notice`);
+
+      const groupLink = currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink;
+      const waNumber = currentUser?.whatsAppNumber || settings.whatsAppNumber;
+
+      // Auto copy to clipboard & auto open WhatsApp group link if configured
+      await triggerWhatsAppAutoSend({
+        message: waNotice,
+        groupLink: groupLink,
+        phoneNumber: waNumber,
+        autoOpen: true
+      });
+
+      setShowAdminWhatsAppModal(true);
+    }
   };
 
   // Proof Modal
@@ -258,6 +294,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     n => !n.read && (n.userId === 'admin' || n.userId === 'all')
   ).length;
 
+  // Live Bangladesh Clock (BST)
+  const [bdClock, setBdClock] = useState(getLiveBDClock());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setBdClock(getLiveBDClock());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Real-Time Calculations
   const approvedTxns = transactions.filter(t => t.status === 'approved');
   const pendingTxns = transactions.filter(t => t.status === 'pending');
@@ -266,11 +312,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     .filter(t => t.type === 'send')
     .reduce((acc, t) => acc + t.amount, 0);
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
+  // Today's send strictly starting from Bangladesh Time 6:00 AM
   const todaySendAmount = approvedTxns
-    .filter(t => t.type === 'send' && new Date(t.createdAt) >= todayStart)
+    .filter(t => t.type === 'send' && isBDToday(t.createdAt))
     .reduce((acc, t) => acc + t.amount, 0);
 
   const totalCommissionAmount = (totalSendAmount / 1000) * 7.5;
@@ -396,39 +440,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       <div className="flex-1 p-4 space-y-4">
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
-            {/* Real-time Wireframe Metric Grid Table (Matching Screenshot 1) */}
-            <div className="bg-white rounded-xl border-2 border-slate-800 overflow-hidden shadow-sm">
-              <div className="divide-y-2 divide-slate-800">
-                {/* Total Sende */}
+            {/* Bangladesh Standard Time (BST) & 6:00 AM Cycle Status Indicator */}
+            <div className="bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center justify-between border border-slate-800 shadow-xs max-w-xl mx-auto">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3 h-3 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="flex items-center gap-1 text-[8px] font-bold">
+                    <span>🇧🇩 Bangladesh Time (BST):</span>
+                    <span className="font-mono text-emerald-300">{bdClock.time12}</span>
+                  </div>
+                  <p className="text-[8px] text-slate-400 font-medium">Daily transaction cycle starts at 6:00 AM BST</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[8px] bg-slate-800 text-slate-200 px-2 py-0.5 rounded font-semibold border border-slate-700 block">
+                  {bdClock.dateMedium}
+                </span>
+              </div>
+            </div>
+
+            {/* Real-time Wireframe Metric Grid Table (Matching Screenshot - Font Size 8) */}
+            <div className="bg-white rounded-lg border-2 border-slate-800 overflow-hidden shadow-xs max-w-xl mx-auto">
+              <div className="divide-y-2 divide-slate-800 text-[8px]">
+                {/* Total Send */}
                 <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
-                  <div className="p-3 text-sm font-extrabold text-slate-900">Total Sende</div>
-                  <div className="p-3 bg-white text-base font-black text-slate-900 font-mono">
+                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900">Total Send</div>
+                  <div className="px-2 py-1 bg-white text-[8px] font-black text-slate-900 font-mono">
                     ৳{totalSendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
 
                 {/* Today Send */}
                 <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
-                  <div className="p-3 text-sm font-extrabold text-slate-900">Today Send</div>
-                  <div className="p-3 bg-white text-base font-black text-blue-900 font-mono">
+                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900">Today Send</div>
+                  <div className="px-2 py-1 bg-white text-[8px] font-black text-blue-900 font-mono">
                     ৳{todaySendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-
-                {/* Commission */}
-                <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
-                  <div className="p-3 text-sm font-extrabold text-slate-900">Commission</div>
-                  <div className="p-3 bg-white text-base font-black text-emerald-700 font-mono">
-                    ৳{totalCommissionAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
 
                 {/* Commission Rate Row */}
                 <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 items-center">
-                  <div className="p-2.5 text-xs font-extrabold text-slate-900 border-r border-slate-800">
+                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900 border-r border-slate-800">
                     Commission Rate
                   </div>
-                  <div className="p-2 bg-white flex items-center justify-between gap-2">
+                  <div className="px-2 py-1 bg-white flex items-center justify-between gap-1">
                     {isEditingRate ? (
                       <div className="flex items-center gap-1 w-full">
                         <input
@@ -436,26 +491,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                           step="0.1"
                           value={rateInput}
                           onChange={e => setRateInput(e.target.value)}
-                          className="w-16 bg-slate-100 border border-slate-400 rounded px-1.5 py-0.5 text-xs font-bold text-slate-900"
+                          className="w-12 bg-slate-100 border border-slate-400 rounded px-1 py-0.5 text-[8px] font-bold text-slate-900"
                         />
-                        <span className="text-xs font-bold">%</span>
+                        <span className="text-[8px] font-bold">%</span>
                         <button
                           onClick={handleSaveRate}
-                          className="bg-emerald-600 text-white p-1 rounded hover:bg-emerald-700"
+                          className="bg-emerald-600 text-white p-0.5 rounded hover:bg-emerald-700 cursor-pointer"
                         >
-                          <Save className="w-3.5 h-3.5" />
+                          <Save className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     ) : (
                       <>
-                        <span className="text-sm font-black text-blue-950 font-mono">
+                        <span className="text-[8px] font-black text-blue-950 font-mono">
                           {settings.defaultCommissionRate}%
                         </span>
                         <button
                           onClick={() => setIsEditingRate(true)}
-                          className="text-xs text-blue-900 font-semibold underline flex items-center gap-1"
+                          className="text-[8px] text-blue-900 font-semibold underline flex items-center gap-0.5 cursor-pointer"
                         >
-                          <Edit2 className="w-3 h-3" /> Edit
+                          <Edit2 className="w-2 h-2" /> Edit
                         </button>
                       </>
                     )}
@@ -463,35 +518,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                 </div>
 
                 {/* Approved Tk & Approved Diposit Header */}
-                <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 text-center text-xs font-extrabold text-slate-900">
-                  <div className="p-3 bg-slate-300">Approved Tk</div>
-                  <div className="p-3 bg-slate-300">Approved Diposit</div>
+                <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 text-center text-[8px] font-extrabold text-slate-900">
+                  <div className="px-2 py-1 bg-slate-300">Approved Tk</div>
+                  <div className="px-2 py-1 bg-slate-300">Approved Diposit</div>
                 </div>
 
                 {/* Approved Values Row */}
-                <div className="grid grid-cols-2 divide-x-2 divide-slate-800 bg-white font-mono font-bold text-xs text-center">
-                  <div className="p-2.5 text-slate-900">
-                    ৳{approvedTkAmount.toLocaleString('en-BD')}
+                <div className="grid grid-cols-2 divide-x-2 divide-slate-800 bg-white font-mono font-bold text-[8px] text-center">
+                  <div className="px-2 py-1 text-slate-900">
+                    ৳{approvedTkAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
                   </div>
-                  <div className="p-2.5 text-emerald-800">
-                    ৳{approvedDepositAmount.toLocaleString('en-BD')}
+                  <div className="px-2 py-1 text-emerald-800">
+                    ৳{approvedDepositAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Wireframe Caption Label */}
-            <div className="text-center text-xs font-semibold text-slate-600 italic">
+            <div className="text-center text-[8px] font-semibold text-slate-600 italic">
               there is Approved Tk and Approved Diposit history
             </div>
 
             {/* History & Approvals Section */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+            <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm space-y-3 max-w-xl mx-auto">
               {/* Filter Tabs */}
-              <div className="flex bg-slate-100 p-1 rounded-lg text-xs font-bold gap-1">
+              <div className="flex bg-slate-100 p-1 rounded-lg text-[8px] font-bold gap-1">
                 <button
                   onClick={() => setHistoryTab('pending')}
-                  className={`flex-1 py-2 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 px-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${
                     historyTab === 'pending'
                       ? 'bg-amber-500 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -502,7 +557,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                 <button
                   onClick={() => setHistoryTab('approved_send')}
-                  className={`flex-1 py-2 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 px-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${
                     historyTab === 'approved_send'
                       ? 'bg-blue-900 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -513,7 +568,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                 <button
                   onClick={() => setHistoryTab('approved_deposit')}
-                  className={`flex-1 py-2 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 px-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${
                     historyTab === 'approved_deposit'
                       ? 'bg-emerald-700 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -524,7 +579,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                 <button
                   onClick={() => setHistoryTab('charges')}
-                  className={`flex-1 py-2 px-2 rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-1.5 px-1.5 rounded-md transition-all flex items-center justify-center gap-1 ${
                     historyTab === 'charges'
                       ? 'bg-rose-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -540,8 +595,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                 {historyTab === 'pending' && (
                   <div>
                     {pendingTxns.length === 0 ? (
-                      <div className="text-center py-8 text-slate-400 text-xs">
-                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-60" />
+                      <div className="text-center py-6 text-slate-400 text-[8px]">
+                        <CheckCircle className="w-6 h-6 text-emerald-500 mx-auto mb-1.5 opacity-60" />
                         No pending transaction requests right now.
                       </div>
                     ) : (
@@ -689,7 +744,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                             <div>
                               <div className="font-bold text-slate-900">{t.userName}</div>
                               <div className="text-slate-500">To: {t.recipientMobile || 'N/A'} ({t.method})</div>
-                              <div className="text-[10px] text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
+                              <div className="text-[10px] text-slate-400">{formatBDDateTime(t.createdAt, false)}</div>
                             </div>
                             <div className="text-right">
                               <div className="font-extrabold text-blue-900">৳{t.amount.toLocaleString('en-BD')}</div>
@@ -718,7 +773,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                             <div>
                               <div className="font-bold text-slate-900">{t.userName}</div>
                               <div className="text-slate-500">Method: {t.method}</div>
-                              <div className="text-[10px] text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
+                              <div className="text-[10px] text-slate-400">{formatBDDateTime(t.createdAt, false)}</div>
                             </div>
                             <div className="text-right">
                               <div className="font-extrabold text-emerald-700">+৳{t.amount.toLocaleString('en-BD')}</div>
@@ -747,7 +802,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                             <div>
                               <div className="font-bold text-slate-900">{t.userName} ({t.userEmail})</div>
                               <div className="text-slate-700 font-medium">{t.comment || 'Commission Charge / Deduction'}</div>
-                              <div className="text-[10px] text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
+                              <div className="text-[10px] text-slate-400">{formatBDDateTime(t.createdAt, false)}</div>
                             </div>
                             <div className="text-right">
                               <div className="font-mono font-black text-rose-600 text-sm">-৳{t.amount.toLocaleString('en-BD')}</div>
@@ -968,10 +1023,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                   }
 
                   if (currentSelectType !== 'only_number') {
-                    const txnDate = new Date(t.createdAt).toISOString().split('T')[0];
-                    if (adminActiveFilter.singleDate && txnDate !== adminActiveFilter.singleDate) return false;
-                    if (adminActiveFilter.fromDate && txnDate < adminActiveFilter.fromDate) return false;
-                    if (adminActiveFilter.toDate && txnDate > adminActiveFilter.toDate) return false;
+                    if (!matchesBDDateFilter(t.createdAt, {
+                      singleDate: adminActiveFilter.singleDate,
+                      fromDate: adminActiveFilter.fromDate,
+                      toDate: adminActiveFilter.toDate
+                    })) {
+                      return false;
+                    }
                   }
 
                   return true;
@@ -1544,7 +1602,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                                     {isCharge ? 'Deducted' : t.status}
                                   </span>
                                 <span className="text-[10px] text-slate-400">
-                                  {new Date(t.createdAt).toLocaleString()}
+                                  {formatBDDateTime(t.createdAt, false)}
                                 </span>
                               </div>
 
@@ -2470,6 +2528,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
           onClose={() => setChargeModalUser(null)}
         />
       )}
+
+      {/* WhatsApp Notice Modal for Admin */}
+      <WhatsAppNoticeModal
+        isOpen={showAdminWhatsAppModal}
+        onClose={() => setShowAdminWhatsAppModal(false)}
+        title={adminWhatsAppNoticeTitle}
+        subTitle="Notice formatted and auto-copied for WhatsApp"
+        formattedMessage={adminWhatsAppNotice}
+        whatsAppGroupLink={currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink}
+        whatsAppNumber={currentUser?.whatsAppNumber || settings.whatsAppNumber}
+        autoCopied={true}
+      />
 
       {/* New Account Creation Modal */}
       {showCreateUserModal && (

@@ -6,6 +6,7 @@ import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
 import { Transaction } from '../types';
 import { generateStatementPDF } from '../utils/pdfGenerator';
+import { formatBDDateTime, matchesBDDateFilter } from '../utils/timeHelper';
 
 interface StatementViewProps {
   onOpenNotifications: () => void;
@@ -78,15 +79,11 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
 
     // Date filters (only when not only_number)
     if (currentSelectType !== 'only_number') {
-      const txnDate = new Date(t.createdAt).toISOString().split('T')[0];
-
-      if (activeFilter.singleDate && txnDate !== activeFilter.singleDate) {
-        return false;
-      }
-      if (activeFilter.fromDate && txnDate < activeFilter.fromDate) {
-        return false;
-      }
-      if (activeFilter.toDate && txnDate > activeFilter.toDate) {
+      if (!matchesBDDateFilter(t.createdAt, {
+        singleDate: activeFilter.singleDate,
+        fromDate: activeFilter.fromDate,
+        toDate: activeFilter.toDate
+      })) {
         return false;
       }
     }
@@ -378,7 +375,7 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                       </div>
                       <div className="text-right">
                         <span className="text-[9px] text-slate-500 font-bold uppercase block leading-none mb-0.5">Date & Time</span>
-                        <span className="text-[9px] text-slate-600 font-medium">{new Date(t.createdAt).toLocaleString('en-BD')}</span>
+                        <span className="text-[9px] text-slate-600 font-medium">{formatBDDateTime(t.createdAt, false)}</span>
                       </div>
                     </div>
 

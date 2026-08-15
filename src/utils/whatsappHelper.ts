@@ -1,7 +1,8 @@
 import { Transaction, User, SystemSettings } from '../types';
+import { formatBDDateTime } from './timeHelper';
 
 /**
- * Clean phone number for WhatsApp API (e.g., converts '01780000000' or '+880 1780 000000' to '8801780000000')
+ * Clean phone number for WhatsApp API (e.g., converts '01793567814' or '+880 1793-567814' to '8801793567814')
  */
 export function cleanWhatsAppNumber(phone?: string): string {
   if (!phone) return '';
@@ -9,7 +10,7 @@ export function cleanWhatsAppNumber(phone?: string): string {
   if (digits.startsWith('+')) {
     digits = digits.substring(1);
   }
-  // If Bangladesh local number starting with 01
+  // If Bangladesh local number starting with 01 (11 digits)
   if (digits.startsWith('01') && digits.length === 11) {
     digits = '88' + digits;
   }
@@ -19,14 +20,15 @@ export function cleanWhatsAppNumber(phone?: string): string {
 /**
  * Builds direct WhatsApp chat URL with pre-filled message
  */
-export function getWhatsAppNumberUrl(phone: string, text: string): string {
+export function getWhatsAppNumberUrl(phone: string, text?: string): string {
   const cleaned = cleanWhatsAppNumber(phone);
   if (!cleaned) return '';
-  return `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(text)}`;
+  const textParam = text ? `&text=${encodeURIComponent(text)}` : '';
+  return `https://api.whatsapp.com/send?phone=${cleaned}${textParam}`;
 }
 
 /**
- * Builds WhatsApp group URL
+ * Builds WhatsApp group URL from link or code
  */
 export function getWhatsAppGroupUrl(groupLink?: string): string {
   if (!groupLink) return '';
@@ -34,10 +36,51 @@ export function getWhatsAppGroupUrl(groupLink?: string): string {
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
+  if (trimmed.startsWith('chat.whatsapp.com/')) {
+    return `https://${trimmed}`;
+  }
   if (trimmed.startsWith('chat.whatsapp.com')) {
     return `https://${trimmed}`;
   }
   return `https://chat.whatsapp.com/${trimmed}`;
+}
+
+/**
+ * Builds general WhatsApp share URL (pre-filled message ready to share to any chat/group)
+ */
+export function getWhatsAppShareUrl(text: string): string {
+  return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+}
+
+/**
+ * Copies text safely to clipboard across all browser types (Desktop, iOS Safari, Android)
+ */
+export async function copyToClipboardSafe(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fallback below
+  }
+
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.warn('Clipboard copy error:', err);
+    return false;
+  }
 }
 
 /**
@@ -48,7 +91,7 @@ export function formatSendMoneyMessage(
   userName: string,
   userMobile?: string
 ): string {
-  const dateStr = txn.createdAt ? new Date(txn.createdAt).toLocaleString('en-BD') : new Date().toLocaleString('en-BD');
+  const dateStr = formatBDDateTime(txn.createdAt || new Date());
   const amountStr = (txn.amount || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 });
 
   return [
@@ -62,9 +105,9 @@ export function formatSendMoneyMessage(
     `📱 *Target Number:* ${txn.recipientMobile || 'N/A'}`,
     txn.comment ? `📝 *Note:* ${txn.comment}` : '',
     `📊 *Status:* ${txn.status ? txn.status.toUpperCase() : 'PENDING'}`,
-    `⏰ *Time:* ${dateStr}`,
+    `⏰ *Time (BST):* ${dateStr}`,
     `────────────────────────`,
-    `_Powered by Masud Telecom Central System_`
+    `_Masud Telecom Automated Central System_`
   ].filter(Boolean).join('\n');
 }
 
@@ -76,7 +119,7 @@ export function formatDepositMessage(
   userName: string,
   userMobile?: string
 ): string {
-  const dateStr = txn.createdAt ? new Date(txn.createdAt).toLocaleString('en-BD') : new Date().toLocaleString('en-BD');
+  const dateStr = formatBDDateTime(txn.createdAt || new Date());
   const amountStr = (txn.amount || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 });
 
   return [
@@ -90,9 +133,9 @@ export function formatDepositMessage(
     txn.comment ? `📝 *Note:* ${txn.comment}` : '',
     txn.attachmentName ? `📎 *Proof File:* ${txn.attachmentName}` : '',
     `📊 *Status:* ${txn.status ? txn.status.toUpperCase() : 'PENDING'}`,
-    `⏰ *Time:* ${dateStr}`,
+    `⏰ *Time (BST):* ${dateStr}`,
     `────────────────────────`,
-    `_Powered by Masud Telecom Central System_`
+    `_Masud Telecom Automated Central System_`
   ].filter(Boolean).join('\n');
 }
 
@@ -103,21 +146,92 @@ export function formatApprovalMessage(
   txn: Transaction,
   adminName: string = 'System Admin'
 ): string {
-  const dateStr = new Date().toLocaleString('en-BD');
+  const dateStr = formatBDDateTime(new Date());
   const amountStr = txn.amount.toLocaleString('en-BD', { minimumFractionDigits: 2 });
 
   return [
     `*✅ MASUD TELECOM - TRANSACTION APPROVED ✅*`,
     `────────────────────────`,
     `🆔 *Txn ID:* ${txn.id}`,
+    `📌 *Type:* ${txn.type === 'deposit' ? 'DEPOSIT' : 'SEND MONEY'} APPROVED`,
     `👤 *User:* ${txn.userName}`,
     `💰 *Amount:* ৳${amountStr}`,
     `💳 *Method:* ${txn.method}`,
     txn.recipientMobile ? `📱 *Target Number:* ${txn.recipientMobile}` : '',
     txn.adminPin ? `🔑 *Admin Security PIN:* ${txn.adminPin}` : '',
     `👑 *Approved By:* ${adminName}`,
-    `⏰ *Time:* ${dateStr}`,
+    `⏰ *Time (BST):* ${dateStr}`,
     `────────────────────────`,
     `_Transaction successfully verified and executed._`
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Formats a clean WhatsApp message for manual Balance Adjustment / Charge
+ */
+export function formatBalanceAdjustmentMessage(
+  userName: string,
+  userMobile: string,
+  action: 'credit' | 'debit' | 'charge',
+  amount: number,
+  newBalance: number,
+  reason?: string
+): string {
+  const dateStr = formatBDDateTime(new Date());
+  const amountStr = amount.toLocaleString('en-BD', { minimumFractionDigits: 2 });
+  const balanceStr = newBalance.toLocaleString('en-BD', { minimumFractionDigits: 2 });
+
+  const title = action === 'credit'
+    ? '💰 BALANCE ADDED (CREDIT)'
+    : action === 'debit'
+    ? '🔻 BALANCE DEDUCTED (DEBIT)'
+    : '⚡ SERVICE CHARGE APPLIED';
+
+  return [
+    `*${title}*`,
+    `────────────────────────`,
+    `👤 *User:* ${userName} (${userMobile})`,
+    `💵 *Amount:* ৳${amountStr}`,
+    `📊 *New Available Balance:* ৳${balanceStr}`,
+    reason ? `📝 *Reason:* ${reason}` : '',
+    `⏰ *Time (BST):* ${dateStr}`,
+    `────────────────────────`,
+    `_Masud Telecom Central Account Management_`
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Triggers automatic WhatsApp sharing and clipboard copying
+ */
+export async function triggerWhatsAppAutoSend(options: {
+  message: string;
+  groupLink?: string;
+  phoneNumber?: string;
+  autoOpen?: boolean;
+}): Promise<{ copied: boolean; opened: boolean; url: string }> {
+  const { message, groupLink, phoneNumber, autoOpen = true } = options;
+
+  // 1. Copy formatted notice to clipboard
+  const copied = await copyToClipboardSafe(message);
+
+  let targetUrl = '';
+  if (groupLink) {
+    targetUrl = getWhatsAppGroupUrl(groupLink);
+  } else if (phoneNumber) {
+    targetUrl = getWhatsAppNumberUrl(phoneNumber, message);
+  } else {
+    targetUrl = getWhatsAppShareUrl(message);
+  }
+
+  let opened = false;
+  if (autoOpen && targetUrl && typeof window !== 'undefined') {
+    try {
+      const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      opened = !!win;
+    } catch (e) {
+      console.warn('Auto window.open blocked by browser:', e);
+    }
+  }
+
+  return { copied, opened, url: targetUrl };
 }

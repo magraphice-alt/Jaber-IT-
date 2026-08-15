@@ -1,8 +1,30 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Bell, ShieldCheck, Phone, CheckCircle, Send as SendIcon, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bell,
+  ShieldCheck,
+  Phone,
+  CheckCircle,
+  Send as SendIcon,
+  CheckCircle2,
+  AlertCircle,
+  MessageCircle,
+  Users,
+  ExternalLink,
+  Copy,
+  Check
+} from 'lucide-react';
 import { TransferMethod } from '../types';
 import { amountToWords } from '../utils/numberToWords';
+import {
+  formatSendMoneyMessage,
+  getWhatsAppGroupUrl,
+  getWhatsAppNumberUrl,
+  triggerWhatsAppAutoSend,
+  copyToClipboardSafe
+} from '../utils/whatsappHelper';
+import { WhatsAppNoticeModal } from './WhatsAppNoticeModal';
 
 interface SendMoneyViewProps {
   onBack: () => void;
@@ -10,7 +32,7 @@ interface SendMoneyViewProps {
 }
 
 export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNotifications }) => {
-  const { createSendRequest, notifications, currentUser } = useApp();
+  const { createSendRequest, notifications, currentUser, users, settings } = useApp();
 
   const [mobileNumber, setMobileNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -19,6 +41,16 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // WhatsApp Auto-Message & Modal State
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [lastWhatsAppNotice, setLastWhatsAppNotice] = useState<string>('');
+  const [copiedInline, setCopiedInline] = useState(false);
+
+  // Find Admin profile WhatsApp config
+  const adminUser = users.find(u => u.role === 'admin');
+  const whatsAppGroupLink = adminUser?.whatsAppGroupLink || settings.whatsAppGroupLink || '';
+  const whatsAppNumber = adminUser?.whatsAppNumber || settings.whatsAppNumber || '+880 1793-567814';
 
   const unreadCount = notifications.filter(
     n => !n.read && (n.userId === currentUser?.id || n.userId === 'all')
@@ -31,6 +63,15 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
     setMobileNumber(digitsOnly);
     if (errorMsg) setErrorMsg(null);
+  };
+
+  const handleCopyNoticeInline = async () => {
+    if (!lastWhatsAppNotice) return;
+    const ok = await copyToClipboardSafe(lastWhatsAppNotice);
+    if (ok) {
+      setCopiedInline(true);
+      setTimeout(() => setCopiedInline(false), 2000);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,7 +106,33 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
       );
 
       if (ok) {
-        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} (${inWords}) to ${cleanMobile} submitted to Admin for approval.`);
+        // Build rich WhatsApp notification message
+        const waMsg = formatSendMoneyMessage(
+          {
+            amount: numAmt,
+            method: method as TransferMethod,
+            recipientMobile: cleanMobile,
+            comment: comment.trim(),
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          },
+          currentUser?.name || 'Customer',
+          currentUser?.mobile
+        );
+
+        setLastWhatsAppNotice(waMsg);
+
+        // Auto copy notice & open WhatsApp Group link / chat if configured
+        await triggerWhatsAppAutoSend({
+          message: waMsg,
+          groupLink: whatsAppGroupLink,
+          phoneNumber: whatsAppNumber,
+          autoOpen: true
+        });
+
+        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} (${inWords}) to ${cleanMobile} submitted to Admin. Notice copied for WhatsApp.`);
+        setShowWhatsAppModal(true);
+
         setMobileNumber('');
         setAmount('');
         setMethod('');
@@ -123,14 +190,80 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
             </div>
           </div>
 
-          {/* Success Alert */}
+          {/* Success Alert & WhatsApp Direct Actions */}
           {successMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
-              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div>
-                <strong className="font-bold">Request Submitted!</strong>
-                <p className="mt-0.5">{successMsg}</p>
+            <div className="space-y-2">
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong className="font-bold">Request Submitted!</strong>
+                  <p className="mt-0.5">{successMsg}</p>
+                </div>
               </div>
+
+              {/* Instant WhatsApp Quick Actions Card */}
+              {lastWhatsAppNotice && (
+                <div className="p-3.5 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span>WhatsApp Group & Admin Notice</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyNoticeInline}
+                      className="text-[11px] font-bold text-emerald-700 bg-white border border-emerald-300 px-2 py-0.5 rounded-lg flex items-center gap-1 hover:bg-emerald-50 active:scale-95 transition-all cursor-pointer shadow-2xs"
+                    >
+                      {copiedInline ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedInline ? 'Copied!' : 'Copy Notice'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {whatsAppGroupLink ? (
+                      <a
+                        href={getWhatsAppGroupUrl(whatsAppGroupLink)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-between shadow-xs transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5" />
+                          Post Notice to WhatsApp Group
+                        </span>
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-100" />
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowWhatsAppModal(true)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-between shadow-xs transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          View WhatsApp Notice
+                        </span>
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-100" />
+                      </button>
+                    )}
+
+                    {whatsAppNumber && (
+                      <a
+                        href={getWhatsAppNumberUrl(whatsAppNumber, lastWhatsAppNotice)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-between shadow-xs transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <SendIcon className="w-3.5 h-3.5" />
+                          Chat with Admin on WhatsApp
+                        </span>
+                        <ExternalLink className="w-3.5 h-3.5 text-teal-100" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -289,6 +422,18 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
           </form>
         </div>
       </div>
+
+      {/* WhatsApp Notice Modal */}
+      <WhatsAppNoticeModal
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
+        title="Send Money Request Notice"
+        subTitle="Notice formatted and copied for WhatsApp"
+        formattedMessage={lastWhatsAppNotice}
+        whatsAppGroupLink={whatsAppGroupLink}
+        whatsAppNumber={whatsAppNumber}
+        autoCopied={true}
+      />
     </div>
   );
 };
