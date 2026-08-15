@@ -42,6 +42,7 @@ interface AppContextType {
   updateSystemSettings: (newSettings: Partial<SystemSettings>) => void;
   changeUserPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
+  deleteNotification: (id: string) => void;
   clearNotifications: () => void;
 }
 
@@ -238,10 +239,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             initialLoadDoneRef.current = true;
           }
         } else {
-          INITIAL_NOTIFICATIONS.forEach(n => {
-            notifiedIdsRef.current.add(n.id);
-            setDoc(doc(db, 'notifications', n.id), cleanForFirestore(n)).catch(() => {});
-          });
+          // When Firestore collection is empty (e.g. cleared by user), preserve empty state
+          setNotifications([]);
+          safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, []);
           initialLoadDoneRef.current = true;
         }
       }, err => {
@@ -946,11 +946,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const deleteNotification = (id: string) => {
+    deleteDoc(doc(db, 'notifications', id)).catch(() => {});
+    setNotifications(prev => {
+      const filtered = prev.filter(n => n.id !== id);
+      safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, filtered);
+      return filtered;
+    });
+  };
+
   const clearNotifications = () => {
-    notifications.forEach(n => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) {
+      notifications.forEach(n => {
+        deleteDoc(doc(db, 'notifications', n.id)).catch(() => {});
+      });
+      setNotifications([]);
+      safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, []);
+      return;
+    }
+
+    // Identify user-relevant notifications to clear
+    const toClear = notifications.filter(
+      n => n.userId === activeUser.id || n.userId === 'all' || (activeUser.role === 'admin' && (n.userId === 'admin' || n.userId === 'all'))
+    );
+
+    toClear.forEach(n => {
       deleteDoc(doc(db, 'notifications', n.id)).catch(() => {});
     });
-    setNotifications([]);
+
+    const remaining = notifications.filter(n => !toClear.some(tc => tc.id === n.id));
+    setNotifications(remaining);
+    safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, remaining);
   };
 
   return (
@@ -980,6 +1007,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSystemSettings,
         changeUserPassword,
         markNotificationRead,
+        deleteNotification,
         clearNotifications
       }}
     >

@@ -38,6 +38,7 @@ export interface Transaction {
   status: TransactionStatus;
   commissionEarned: number; // Commission calculated on send or deposit
   amountInWords?: string;
+  balanceAfter?: number;
   createdAt: string;
   approvedAt?: string;
   adminPin?: string;

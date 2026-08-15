@@ -99,7 +99,9 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
         mobile: currentUser.mobile,
         email: currentUser.email,
         address: currentUser.address,
-        balance: currentUser.balance
+        balance: currentUser.balance,
+        totalCommission: currentUser.totalCommission,
+        commissionRate: currentUser.commissionRate
       },
       transactions: userTxns,
       filterInfo: {

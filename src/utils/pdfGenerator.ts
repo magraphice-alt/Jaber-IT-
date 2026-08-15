@@ -10,6 +10,8 @@ interface GeneratePDFParams {
     email?: string;
     address?: string;
     balance?: number;
+    totalCommission?: number;
+    commissionRate?: number;
   };
   transactions: Transaction[];
   filterInfo?: {
@@ -71,27 +73,71 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
 
   // 3. Customer Info Box
   let startY = 40;
+
+  // 4. Sort Transactions in Strict Chronological Order (First transaction on First Line, Last on Last Line)
+  const sortedTxns = [...transactions].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  let totalSend = 0;
+  let totalDeposit = 0;
+  let totalCommission = 0;
+  let totalCharges = 0;
+
+  // Format currency with standard 2 decimal places for bank balance sheets
+  const formatCurrency = (val: number) => {
+    return val.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Calculate Net Total Credits & Debits to derive Opening Balance accurately
+  let periodTotalDebit = 0;
+  let periodTotalCredit = 0;
+
+  sortedTxns.forEach(t => {
+    const isDebit = (t.type === 'send' || t.type === 'charge') && t.status !== 'rejected';
+    const isCredit = t.type === 'deposit' && t.status === 'approved';
+
+    if (t.type === 'send' && t.status !== 'rejected') {
+      totalSend += t.amount;
+      // Calculate user commission earned on this send transaction
+      const earned = (t.commissionEarned !== undefined && t.commissionEarned > 0)
+        ? t.commissionEarned
+        : ((t.amount / 1000) * 7.5);
+      totalCommission += earned;
+    } else if (t.type === 'deposit' && t.status === 'approved') {
+      totalDeposit += t.amount;
+    } else if (t.type === 'charge') {
+      totalCharges += t.amount;
+    }
+
+    if (isDebit) periodTotalDebit += t.amount;
+    if (isCredit) periodTotalCredit += t.amount;
+  });
+
+  // If filtered transactions have no send transactions, fallback to user's overall commission if present
+  const displayCommission = totalCommission > 0 
+    ? totalCommission 
+    : (user.totalCommission !== undefined && user.totalCommission > 0 ? user.totalCommission : 0);
+
+  // Opening Balance before the first transaction of the selected period
+  const currentBalance = user.balance ?? 0;
+  const openingBalance = currentBalance - periodTotalCredit + periodTotalDebit;
+
+  // Render Customer & Statement Info Box
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(14, startY, pageWidth - 28, 24, 2, 2, 'F');
+  doc.roundedRect(14, startY, pageWidth - 28, 26, 2, 2, 'F');
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(14, startY, pageWidth - 28, 24, 2, 2, 'S');
+  doc.roundedRect(14, startY, pageWidth - 28, 26, 2, 2, 'S');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Customer Name: ${user.name || 'User'}`, 18, startY + 6);
+  doc.text(`Customer Name: ${user.name || 'User'}`, 18, startY + 6.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`Mobile Number: ${user.mobile || 'N/A'}`, 18, startY + 12);
-  doc.text(`Address: ${user.address || 'Dhaka, Bangladesh'}`, 18, startY + 18);
-
-  // Balance & Filter Badge
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 58, 138);
-  doc.text(`Current Balance: Tk. ${(user.balance || 0).toLocaleString('en-BD')}`, pageWidth - 18, startY + 6, { align: 'right' });
+  doc.text(`Mobile: ${user.mobile || 'N/A'}  |  Address: ${user.address || 'Dhaka, Bangladesh'}`, 18, startY + 12.5);
 
   const filterSummary = [
     `Filter: ${filterInfo?.type ? filterInfo.type.toUpperCase() : 'ALL'}`,
@@ -104,98 +150,118 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(filterSummary, pageWidth - 18, startY + 18, { align: 'right' });
+  doc.text(`Statement Period: ${filterSummary || 'All Time'}`, 18, startY + 18.5);
 
-  startY += 28;
-
-  // 4. Calculate Totals
-  const totalSend = transactions
-    .filter(t => t.type === 'send' && t.status === 'approved')
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const totalDeposit = transactions
-    .filter(t => t.type === 'deposit' && t.status === 'approved')
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const totalCommission = transactions
-    .filter(t => t.type === 'charge')
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  // Summary Cards Bar
-  doc.setFillColor(241, 245, 249);
-  doc.rect(14, startY, pageWidth - 28, 12, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.rect(14, startY, pageWidth - 28, 12, 'S');
-
+  // Right Side - Balances
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Opening Balance: Tk. ${formatCurrency(openingBalance)}`, pageWidth - 18, startY + 6.5, { align: 'right' });
 
-  doc.text(`Total Records: ${transactions.length}`, 18, startY + 7.5);
-  doc.text(`Total Deposit: Tk. ${totalDeposit.toLocaleString('en-BD')}`, 65, startY + 7.5);
-  doc.text(`Total Send: Tk. ${totalSend.toLocaleString('en-BD')}`, 120, startY + 7.5);
-  doc.text(`Commission: Tk. ${totalCommission.toLocaleString('en-BD')}`, 170, startY + 7.5);
+  doc.setFontSize(10);
+  doc.setTextColor(30, 58, 138);
+  doc.text(`Closing Balance: Tk. ${formatCurrency(currentBalance)}`, pageWidth - 18, startY + 14.5, { align: 'right' });
 
-  startY += 16;
+  startY += 30;
 
-  // 5. Build AutoTable Data
-  const tableHead = [['SL', 'Date & Time', 'Txn ID', 'Type', 'Method / Target', 'PIN', 'Status', 'Amount (Tk.)']];
+  // Running Ledger Balance Calculator (Debit Minus -, Credit Plus +)
+  let rollingBal = openingBalance;
+  const runningBalances = new Map<string, number>();
 
-  const tableData = transactions.map((t, index) => {
+  sortedTxns.forEach(t => {
+    const isDebit = (t.type === 'send' || t.type === 'charge') && t.status !== 'rejected';
+    const isCredit = t.type === 'deposit' && t.status === 'approved';
+
+    if (isDebit) {
+      rollingBal -= t.amount;
+    } else if (isCredit) {
+      rollingBal += t.amount;
+    }
+    runningBalances.set(t.id, rollingBal);
+  });
+
+  // Calculate totals and format rows
+  const tableHead = [[
+    'SL',
+    'Date & Time (BST)',
+    'Txn ID',
+    'Particulars / Method',
+    'Target / Ref',
+    'Status',
+    'Debit (Tk.)',
+    'Credit (Tk.)',
+    'Balance (Tk.)'
+  ]];
+
+  const tableData = sortedTxns.map((t, index) => {
     const isSend = t.type === 'send';
     const isCharge = t.type === 'charge';
+    const isDeposit = t.type === 'deposit';
+
     const dateStr = formatBDDateTime(t.createdAt, false);
-    const typeLabel = isCharge ? 'COMMISSION' : isSend ? 'SEND' : 'DEPOSIT';
-    const targetLabel = t.recipientMobile ? `${t.method.toUpperCase()} (${t.recipientMobile})` : t.method.toUpperCase();
-    const pinStr = t.adminPin ? `Key: ${t.adminPin}` : '-';
-    const statusStr = isCharge ? 'Deducted' : t.status.toUpperCase();
-    const amountSign = isSend || isCharge ? '-' : '+';
-    const amountStr = `${amountSign}${t.amount.toLocaleString('en-BD')}`;
+    const particularLabel = isCharge ? 'COMMISSION CHARGE' : `${isSend ? 'SEND MONEY' : 'DEPOSIT'} (${t.method.toUpperCase()})`;
+    const targetLabel = t.recipientMobile ? `${t.recipientMobile}${t.adminPin ? ` [Key:${t.adminPin}]` : ''}` : (t.comment || '-');
+    const statusStr = isCharge ? 'POSTED' : t.status.toUpperCase();
+
+    // Bank Ledger Debit / Credit split:
+    // Debit = Outflow / Deductions (Send, Charge)
+    // Credit = Inflow / Additions (Deposit)
+    const debitAmount = (isSend || isCharge) ? formatCurrency(t.amount) : '-';
+    const creditAmount = isDeposit ? formatCurrency(t.amount) : '-';
+    const computedBal = runningBalances.get(t.id) ?? currentBalance;
+    const balanceStr = formatCurrency(computedBal);
 
     return [
       (index + 1).toString(),
       dateStr,
       t.id,
-      typeLabel,
+      particularLabel,
       targetLabel,
-      pinStr,
       statusStr,
-      amountStr
+      debitAmount,
+      creditAmount,
+      balanceStr
     ];
   });
 
+  // 5. Draw Bank Balance Sheet Table
   autoTable(doc, {
     startY: startY,
     head: tableHead,
     body: tableData,
     theme: 'grid',
+    margin: { left: 10, right: 10 },
     headStyles: {
-      fillColor: [30, 58, 138],
+      fillColor: [15, 23, 42], // Slate 900
       textColor: [255, 255, 255],
-      fontSize: 8,
+      fontSize: 7,
       fontStyle: 'bold',
-      halign: 'center'
+      halign: 'center',
+      valign: 'middle',
+      cellPadding: 2
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: 7,
       textColor: [30, 41, 59],
-      cellPadding: 2.5
+      cellPadding: 2,
+      valign: 'middle'
     },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },
-      1: { cellWidth: 32 },
-      2: { fontStyle: 'bold', cellWidth: 22 },
-      3: { halign: 'center', cellWidth: 22 },
-      4: { cellWidth: 38 },
-      5: { halign: 'center', cellWidth: 18 },
-      6: { halign: 'center', cellWidth: 18 },
-      7: { halign: 'right', fontStyle: 'bold', cellWidth: 22 }
+      0: { halign: 'center', cellWidth: 9 },
+      1: { cellWidth: 26 },
+      2: { fontStyle: 'bold', cellWidth: 19, halign: 'center' },
+      3: { cellWidth: 32 },
+      4: { cellWidth: 26 },
+      5: { halign: 'center', cellWidth: 20 },
+      6: { halign: 'right', fontStyle: 'bold', textColor: [225, 29, 72], cellWidth: 19 }, // Debit (Red)
+      7: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129], cellWidth: 19 }, // Credit (Emerald)
+      8: { halign: 'right', fontStyle: 'bold', textColor: [30, 58, 138], cellWidth: 20 }   // Balance (Navy)
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252]
     },
     didDrawPage: (data) => {
-      // Footer
+      // Footer on each page
       const pageCount = typeof (doc as any).getNumberOfPages === 'function' ? (doc as any).getNumberOfPages() : data.pageNumber;
       const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -203,18 +269,75 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
       doc.text(
-        'This is a computer-generated digital statement from Masud Telecom. No seal or signature required.',
-        14,
+        'This is an authentic computer-generated digital balance sheet statement from Masud Telecom.',
+        10,
         pageHeight - 8
       );
       doc.text(
         `Page ${data.pageNumber} of ${pageCount}`,
-        pageWidth - 14,
+        pageWidth - 10,
         pageHeight - 8,
         { align: 'right' }
       );
     }
   });
+
+  // 6. Attached Summary Area DIRECTLY UNDER the Table Finish Line
+  const finalTableY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : startY + 60;
+  let summaryY = finalTableY;
+
+  // If near page bottom, add a new page so summary stays intact
+  if (summaryY > doc.internal.pageSize.getHeight() - 40) {
+    doc.addPage();
+    summaryY = 20;
+  }
+
+  // Summary Container Box attached under table finish line
+  const summaryBoxHeight = 14;
+  doc.setFillColor(241, 245, 249); // Clean slate background
+  doc.rect(10, summaryY, 190, summaryBoxHeight, 'F');
+  
+  // Double-line finish border (Standard Financial Statement Finishing Line)
+  doc.setDrawColor(15, 23, 42); // Dark Navy / Slate Finish
+  doc.setLineWidth(0.6);
+  doc.line(10, summaryY, 200, summaryY); // Top finish line attached to table bottom
+  doc.line(10, summaryY + summaryBoxHeight, 200, summaryY + summaryBoxHeight); // Bottom line
+  doc.setLineWidth(0.2);
+  doc.line(10, summaryY + summaryBoxHeight + 0.8, 200, summaryY + summaryBoxHeight + 0.8); // Double finish line
+
+  // Left & Right boundary lines
+  doc.line(10, summaryY, 10, summaryY + summaryBoxHeight);
+  doc.line(200, summaryY, 200, summaryY + summaryBoxHeight);
+
+  // Summary Metrics Text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+
+  const textY = summaryY + 8.5;
+  doc.text(`Total Records: ${transactions.length}`, 14, textY);
+  
+  doc.setTextColor(16, 185, 129);
+  doc.text(`Total Deposit (+): Tk. ${formatCurrency(totalDeposit)}`, 48, textY);
+
+  doc.setTextColor(225, 29, 72);
+  doc.text(`Total Send (-): Tk. ${formatCurrency(totalSend)}`, 102, textY);
+
+  doc.setTextColor(217, 119, 6);
+  doc.text(`Commission: Tk. ${formatCurrency(displayCommission)}`, 154, textY);
+
+  // 7. Statement Sign-off / Balance Verification Note below finish line
+  const signOffY = summaryY + summaryBoxHeight + 8;
+  if (signOffY < doc.internal.pageSize.getHeight() - 20) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `Closing Balance: Tk. ${formatCurrency(user.balance || 0)}  |  Total Outflows (Debits): Tk. ${formatCurrency(totalSend + totalCharges)}  |  Total Inflows (Credits): Tk. ${formatCurrency(totalDeposit)}`,
+      10,
+      signOffY
+    );
+  }
 
   // Save the PDF File
   const safeFileName = `Statement_${user.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`;
