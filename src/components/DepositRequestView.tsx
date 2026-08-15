@@ -178,15 +178,15 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
 
         setLastWhatsAppNotice(waMsg);
 
-        // Auto copy notice & open WhatsApp Group link / chat if configured
+        // Auto copy notice to clipboard for WhatsApp without opening another window
         await triggerWhatsAppAutoSend({
           message: waMsg,
           groupLink: whatsAppGroupLink,
           phoneNumber: whatsAppNumber,
-          autoOpen: true
+          autoOpen: false
         });
 
-        setSuccessMsg(`Deposit request of ৳${numAmt.toLocaleString('en-BD')} submitted successfully. Notice copied for WhatsApp.`);
+        setSuccessMsg(`Deposit request of ৳${numAmt.toLocaleString('en-BD')} submitted successfully.`);
         setShowWhatsAppModal(true);
 
         setAmount('');

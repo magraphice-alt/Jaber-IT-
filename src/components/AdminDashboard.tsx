@@ -261,15 +261,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       const groupLink = currentUser?.whatsAppGroupLink || settings.whatsAppGroupLink;
       const waNumber = currentUser?.whatsAppNumber || settings.whatsAppNumber;
 
-      // Auto copy to clipboard & auto open WhatsApp group link if configured
+      // Auto copy to clipboard without opening another window
       await triggerWhatsAppAutoSend({
         message: waNotice,
         groupLink: groupLink,
         phoneNumber: waNumber,
-        autoOpen: true
+        autoOpen: false
       });
 
-      setShowAdminWhatsAppModal(true);
+      setShowAdminWhatsAppModal(false);
     }
   };
 

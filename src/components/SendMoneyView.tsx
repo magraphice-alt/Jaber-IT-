@@ -122,15 +122,15 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
 
         setLastWhatsAppNotice(waMsg);
 
-        // Auto copy notice & open WhatsApp Group link / chat if configured
+        // Auto copy notice to clipboard for WhatsApp without opening another window
         await triggerWhatsAppAutoSend({
           message: waMsg,
           groupLink: whatsAppGroupLink,
           phoneNumber: whatsAppNumber,
-          autoOpen: true
+          autoOpen: false
         });
 
-        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} (${inWords}) to ${cleanMobile} submitted to Admin. Notice copied for WhatsApp.`);
+        setSuccessMsg(`Send request of ৳${numAmt.toLocaleString('en-BD')} (${inWords}) to ${cleanMobile} submitted successfully.`);
         setShowWhatsAppModal(true);
 
         setMobileNumber('');

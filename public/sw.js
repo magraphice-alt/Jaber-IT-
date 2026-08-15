@@ -22,6 +22,45 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Handle Web Push notification events when the web app is closed or running in background
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { body: event.data.text() };
+    }
+  }
+
+  const rawTitle = data.title || 'Account Notification';
+  const title = rawTitle.startsWith('Masud Telecom') ? rawTitle : `Masud Telecom: ${rawTitle.replace(/^[^\w\s]+/, '').trim()}`;
+  const body = data.body || data.message || 'New activity in your Masud Telecom account.';
+
+  const options = {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    vibrate: [600, 150, 600, 150, 600, 150, 600], // Mobile vibration alert
+    silent: false,
+    renotify: true,
+    timestamp: Date.now(),
+    tag: `masud-push-${Date.now()}`,
+    requireInteraction: true,
+    data: {
+      url: data.url || '/',
+      dateOfArrival: Date.now()
+    },
+    actions: [
+      { action: 'open', title: 'Open App' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
 // Show legitimate mobile notification in device status bar / notification drawer with sound & vibration
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_HOME_SCREEN_NOTIFICATION') {

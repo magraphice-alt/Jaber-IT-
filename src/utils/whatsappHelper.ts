@@ -201,7 +201,7 @@ export function formatBalanceAdjustmentMessage(
 }
 
 /**
- * Triggers automatic WhatsApp sharing and clipboard copying
+ * Triggers WhatsApp notice clipboard copying without forcing external window popups
  */
 export async function triggerWhatsAppAutoSend(options: {
   message: string;
@@ -209,7 +209,7 @@ export async function triggerWhatsAppAutoSend(options: {
   phoneNumber?: string;
   autoOpen?: boolean;
 }): Promise<{ copied: boolean; opened: boolean; url: string }> {
-  const { message, groupLink, phoneNumber, autoOpen = true } = options;
+  const { message, groupLink, phoneNumber, autoOpen = false } = options;
 
   // 1. Copy formatted notice to clipboard
   const copied = await copyToClipboardSafe(message);
