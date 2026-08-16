@@ -13,6 +13,7 @@ import {
   AlertCircle,
   XCircle,
   RotateCcw,
+  Lock,
   ShieldCheck,
   Share2,
   Copy,
@@ -432,20 +433,34 @@ Thank you - Masud Telecom
                       {transaction.rejectionReason || 'Declined by Admin'}
                     </p>
 
-                    {/* Button under the Reject Field: Resend & Correct Number */}
+                    {/* Button under the Reject Field: Resend & Correct Number (or Locked state) */}
                     {transaction.type === 'send' && (
                       <div className="pt-1 no-print">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            startResendTransaction(transaction);
-                            onClose();
-                          }}
-                          className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 active:scale-95 text-white py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all border border-rose-400"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 text-white shrink-0" />
-                          <span>Resend & Correct Number</span>
-                        </button>
+                        {transaction.isResent ? (
+                          <div className="w-full bg-slate-100 border border-slate-300 text-slate-700 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <span className="text-[10px] text-slate-800 font-extrabold truncate">
+                                Receipt Locked — Resent {transaction.resentTxnId ? `(${transaction.resentTxnId})` : ''}
+                              </span>
+                            </div>
+                            <span className="bg-slate-200 text-slate-600 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">
+                              Locked (1x Used)
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              startResendTransaction(transaction);
+                              onClose();
+                            }}
+                            className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 active:scale-95 text-white py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all border border-rose-400"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-white shrink-0" />
+                            <span>Resend & Correct Number</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -495,17 +510,31 @@ Thank you - Masud Telecom
           {/* Quick Resend & Correct Action in Footer */}
           {transaction.status === 'rejected' && transaction.type === 'send' && (
             <div className="mb-2">
-              <button
-                type="button"
-                onClick={() => {
-                  startResendTransaction(transaction);
-                  onClose();
-                }}
-                className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-extrabold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all cursor-pointer border border-rose-400"
-              >
-                <RotateCcw className="w-4 h-4 text-white" />
-                <span>Resend & Correct Number</span>
-              </button>
+              {transaction.isResent ? (
+                <div className="w-full bg-slate-100 border border-slate-300 text-slate-700 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-[11px] font-extrabold text-slate-800 truncate">
+                      Receipt Locked (Already Resent {transaction.resentTxnId ? `as ${transaction.resentTxnId}` : ''})
+                    </span>
+                  </div>
+                  <span className="bg-slate-200 text-slate-600 text-[9px] font-black px-2 py-0.5 rounded uppercase shrink-0">
+                    Locked
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    startResendTransaction(transaction);
+                    onClose();
+                  }}
+                  className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-extrabold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all cursor-pointer border border-rose-400"
+                >
+                  <RotateCcw className="w-4 h-4 text-white" />
+                  <span>Resend & Correct Number</span>
+                </button>
+              )}
             </div>
           )}
 

@@ -43,6 +43,9 @@ export interface Transaction {
   approvedAt?: string;
   adminPin?: string;
   rejectionReason?: string;
+  isResent?: boolean; // When true, receipt is locked from 2nd resend
+  resentTxnId?: string; // New replacement Transaction ID
+  resentAt?: string;
 }
 
 export interface NotificationItem {

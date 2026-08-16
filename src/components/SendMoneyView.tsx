@@ -120,11 +120,13 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
     setIsSubmitting(true);
 
     try {
+      const origTxnId = resendDraft?.originalTxnId;
       const ok = await createSendRequest(
         cleanMobile,
         numAmt,
         method as TransferMethod,
-        comment.trim()
+        comment.trim(),
+        origTxnId
       );
 
       if (ok) {

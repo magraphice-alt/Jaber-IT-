@@ -131,6 +131,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [resendDraft, setResendDraft] = useState<ResendDraftData | null>(null);
 
   const startResendTransaction = (txn: Transaction) => {
+    if (txn.isResent) {
+      triggerOperationSuccess('Receipt is Locked', `This receipt was already resent & corrected${txn.resentTxnId ? ` as ${txn.resentTxnId}` : ''}.`);
+      return;
+    }
     setResendDraft({
       recipientMobile: txn.recipientMobile || '',
       amount: txn.amount || 0,
@@ -381,7 +385,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     recipientMobile: string,
     amount: number,
     method: TransferMethod,
-    comment?: string
+    comment?: string,
+    originalTxnId?: string
   ): Promise<boolean> => {
     if (!currentUser) return false;
     if (amount <= 0) return false;
@@ -406,6 +411,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     };
 
+    // If this send request was created via Resend & Correct, lock the original rejected receipt
+    const origIdToLock = originalTxnId || resendDraft?.originalTxnId;
+    if (origIdToLock) {
+      setTransactions(prev =>
+        prev.map(t => {
+          if (t.id === origIdToLock) {
+            const lockedTxn: Transaction = {
+              ...t,
+              isResent: true,
+              resentTxnId: newTxn.id,
+              resentAt: new Date().toISOString()
+            };
+            setDoc(doc(db, 'transactions', origIdToLock), cleanForFirestore(lockedTxn)).catch(() => {});
+            return lockedTxn;
+          }
+          return t;
+        })
+      );
+
+      // Update associated notifications to show locked/resent status
+      setNotifications(prev =>
+        prev.map(n => {
+          if (n.txnId === origIdToLock) {
+            const updated = {
+              ...n,
+              message: n.message.includes('(Already Resent & Corrected)')
+                ? n.message
+                : `${n.message} (Already Resent & Corrected as ${newTxn.id})`
+            };
+            setDoc(doc(db, 'notifications', n.id), cleanForFirestore(updated)).catch(() => {});
+            return updated;
+          }
+          return n;
+        })
+      );
+
+      setResendDraft(null);
+    }
+
     setTransactions(prev => [newTxn, ...prev]);
     setDoc(doc(db, 'transactions', newTxn.id), cleanForFirestore(newTxn)).catch(() => {});
 
@@ -413,8 +457,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const adminNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
       userId: 'admin',
-      title: 'New Send Request',
-      message: `${currentUser.name} requested a Send transfer of ৳${amount.toLocaleString('en-BD')} (${inWords}) to ${recipientMobile}.`,
+      title: origIdToLock ? 'Resent Corrected Send Request' : 'New Send Request',
+      message: `${currentUser.name} requested a ${origIdToLock ? `corrected (Resent from ${origIdToLock}) ` : ''}Send transfer of ৳${amount.toLocaleString('en-BD')} (${inWords}) to ${recipientMobile}.`,
       timestamp: 'Just now',
       read: false,
       type: 'alert'

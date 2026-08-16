@@ -41,7 +41,10 @@
         "createdAt": { "type": "string" },
         "approvedAt": { "type": "string" },
         "adminPin": { "type": "string" },
-        "rejectionReason": { "type": "string" }
+        "rejectionReason": { "type": "string" },
+        "isResent": { "type": "boolean" },
+        "resentTxnId": { "type": "string" },
+        "resentAt": { "type": "string" }
       },
       "required": ["id", "userId", "type", "amount", "method", "status"]
     },

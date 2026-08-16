@@ -208,7 +208,7 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
 
     const dateStr = formatBDDateTime(t.createdAt, false);
     const particularLabel = isCharge ? 'COMMISSION CHARGE' : `${isSend ? 'SEND MONEY' : 'DEPOSIT'} (${t.method.toUpperCase()})`;
-    const targetLabel = t.recipientMobile ? `${t.recipientMobile}${t.adminPin ? ` [Key:${t.adminPin}]` : ''}` : (t.comment || '-');
+    const targetLabel = t.recipientMobile ? `${t.recipientMobile}${t.adminPin ? ` [PIN:${t.adminPin}]` : ''}` : (t.comment || '-');
     const statusStr = isCharge ? 'POSTED' : t.status.toUpperCase();
 
     // Bank Ledger Debit / Credit split:
@@ -319,20 +319,17 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
 
   // Summary Metrics Text
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
 
   const textY = summaryY + 8.5;
-  doc.text(`Total Records: ${transactions.length}`, 14, textY);
+  doc.text(`Total Records: ${transactions.length}`, 16, textY);
   
   doc.setTextColor(16, 185, 129);
-  doc.text(`Total Deposit (+): Tk. ${formatCurrency(totalDeposit)}`, 48, textY);
+  doc.text(`Total Deposit (+): Tk. ${formatCurrency(totalDeposit)}`, 75, textY);
 
   doc.setTextColor(225, 29, 72);
-  doc.text(`Total Send (-): Tk. ${formatCurrency(totalSend)}`, 102, textY);
-
-  doc.setTextColor(217, 119, 6);
-  doc.text(`Commission: Tk. ${formatCurrency(displayCommission)}`, 154, textY);
+  doc.text(`Total Send (-): Tk. ${formatCurrency(totalSend)}`, 140, textY);
 
   // 7. Statement Sign-off / Balance Verification Note below finish line
   const signOffY = summaryY + summaryBoxHeight + 8;

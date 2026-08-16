@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter, RotateCcw } from 'lucide-react';
+import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter, RotateCcw, Lock } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
@@ -426,17 +426,27 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                     <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2">
                       <div>
                         {t.status === 'rejected' && t.type === 'send' && (
-                          <button
-                            type="button"
-                            onClick={e => {
-                              e.stopPropagation();
-                              startResendTransaction(t);
-                            }}
-                            className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-                          >
-                            <RotateCcw className="w-3 h-3 text-white shrink-0" />
-                            <span>Resend & Correct</span>
-                          </button>
+                          t.isResent ? (
+                            <span
+                              title={`Already resent & corrected${t.resentTxnId ? ` as ${t.resentTxnId}` : ''}`}
+                              className="bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-2xs cursor-not-allowed"
+                            >
+                              <Lock className="w-3 h-3 text-slate-500 shrink-0" />
+                              <span>Resent & Locked</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                startResendTransaction(t);
+                              }}
+                              className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                            >
+                              <RotateCcw className="w-3 h-3 text-white shrink-0" />
+                              <span>Resend & Correct</span>
+                            </button>
+                          )
                         )}
                       </div>
 

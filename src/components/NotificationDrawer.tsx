@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText, RotateCcw } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText, RotateCcw, Lock } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { Transaction } from '../types';
 
@@ -61,10 +61,10 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, 
               </div>
             ) : (
               userNotifs.map(n => {
-                // Check if notification matches a transaction
+                // Check if notification matches a specific transaction
                 const matchedTxn = n.txnId
                   ? transactions.find(t => t.id === n.txnId)
-                  : transactions.find(t => t.userId === currentUser?.id);
+                  : undefined;
 
                 return (
                   <div
@@ -104,18 +104,28 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, 
                             </button>
 
                             {matchedTxn.status === 'rejected' && matchedTxn.type === 'send' && (
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  startResendTransaction(matchedTxn);
-                                  onClose();
-                                }}
-                                className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5 text-white" />
-                                <span>Resend & Correct</span>
-                              </button>
+                              matchedTxn.isResent ? (
+                                <span
+                                  title={`Already resent${matchedTxn.resentTxnId ? ` as ${matchedTxn.resentTxnId}` : ''}`}
+                                  className="bg-slate-100 border border-slate-300 text-slate-600 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed shadow-2xs"
+                                >
+                                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Resent & Locked</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    startResendTransaction(matchedTxn);
+                                    onClose();
+                                  }}
+                                  className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-white" />
+                                  <span>Resend & Correct</span>
+                                </button>
+                              )
                             )}
                           </div>
                         )}

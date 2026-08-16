@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2, Clock, RotateCcw, AlertCircle } from 'lucide-react';
+import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2, Clock, RotateCcw, AlertCircle, Lock } from 'lucide-react';
 import { UserTab } from './UserNavbar';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
@@ -253,17 +253,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
                           </button>
 
                           {t.status === 'rejected' && t.type === 'send' && (
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation();
-                                startResendTransaction(t);
-                              }}
-                              className="text-[10px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
-                            >
-                              <RotateCcw className="w-3 h-3 text-white" />
-                              <span>Resend & Correct</span>
-                            </button>
+                            t.isResent ? (
+                              <span
+                                title={`Already resent${t.resentTxnId ? ` as ${t.resentTxnId}` : ''}`}
+                                className="text-[10px] bg-slate-100 border border-slate-300 text-slate-500 font-bold px-1.5 py-0.5 rounded flex items-center gap-1 cursor-not-allowed shadow-2xs"
+                              >
+                                <Lock className="w-2.5 h-2.5 text-slate-400" />
+                                <span>Locked</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  startResendTransaction(t);
+                                }}
+                                className="text-[10px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
+                              >
+                                <RotateCcw className="w-3 h-3 text-white" />
+                                <span>Resend & Correct</span>
+                              </button>
+                            )
                           )}
                         </div>
                       )}
