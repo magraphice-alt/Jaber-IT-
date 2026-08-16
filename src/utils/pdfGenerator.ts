@@ -125,9 +125,9 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
 
   // Render Customer & Statement Info Box
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(14, startY, pageWidth - 28, 26, 2, 2, 'F');
+  doc.roundedRect(14, startY, pageWidth - 28, 28, 2, 2, 'F');
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(14, startY, pageWidth - 28, 26, 2, 2, 'S');
+  doc.roundedRect(14, startY, pageWidth - 28, 28, 2, 2, 'S');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -150,19 +150,27 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Statement Period: ${filterSummary || 'All Time'}`, 18, startY + 18.5);
+  doc.text(`Statement Period: ${filterSummary || 'All Time'}`, 18, startY + 20);
 
-  // Right Side - Balances
+  // Right Side - Balances & Total Commission
+  const userTotalCommission = (user.totalCommission !== undefined && user.totalCommission >= 0)
+    ? user.totalCommission
+    : displayCommission;
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
   doc.text(`Opening Balance: Tk. ${formatCurrency(openingBalance)}`, pageWidth - 18, startY + 6.5, { align: 'right' });
 
-  doc.setFontSize(10);
+  doc.setFontSize(9.5);
   doc.setTextColor(30, 58, 138);
-  doc.text(`Closing Balance: Tk. ${formatCurrency(currentBalance)}`, pageWidth - 18, startY + 14.5, { align: 'right' });
+  doc.text(`Closing Balance: Tk. ${formatCurrency(currentBalance)}`, pageWidth - 18, startY + 13.5, { align: 'right' });
 
-  startY += 30;
+  doc.setFontSize(8.5);
+  doc.setTextColor(217, 119, 6);
+  doc.text(`Total Commission: Tk. ${formatCurrency(userTotalCommission)}`, pageWidth - 18, startY + 20.5, { align: 'right' });
+
+  startY += 32;
 
   // Running Ledger Balance Calculator (Debit Minus -, Credit Plus +)
   let rollingBal = openingBalance;

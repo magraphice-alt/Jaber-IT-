@@ -1493,7 +1493,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                                   mobile: selectedUser.mobile,
                                   email: selectedUser.email,
                                   address: selectedUser.address,
-                                  balance: selectedUser.balance
+                                  balance: selectedUser.balance,
+                                  totalCommission: selectedUser.totalCommission,
+                                  commissionRate: selectedUser.commissionRate
                                 },
                                 transactions: filteredUserTxns,
                                 filterInfo: {
@@ -1618,28 +1620,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                             {t.recipientMobile && (
                               <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 mt-1 mb-1 space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="min-w-0 pr-2">
-                                    <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider">Target Number</span>
-                                    <span className="text-sm font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyNumber(t.recipientMobile!)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0 shadow-xs"
-                                  >
-                                    {copiedNumber === t.recipientMobile ? (
-                                      <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                        <span className="text-emerald-300 font-bold">Copied!</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3.5 h-3.5 text-blue-200" />
-                                        <span>Copy Number</span>
-                                      </>
-                                    )}
-                                  </button>
+                                <div>
+                                  <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider">Target Number</span>
+                                  <span className="text-sm font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
                                 </div>
                                 {t.adminPin && (
                                   <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between">
