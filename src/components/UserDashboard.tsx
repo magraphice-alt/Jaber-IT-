@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { Bell, ArrowUpRight, Percent, ChevronRight, Send, PlusCircle, ShoppingCart, MoreHorizontal, TrendingUp, FileText, CheckCircle2, Clock, RotateCcw, AlertCircle } from 'lucide-react';
 import { UserTab } from './UserNavbar';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
@@ -15,7 +15,7 @@ interface UserDashboardProps {
 }
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpenNotifications }) => {
-  const { currentUser, transactions, notifications } = useApp();
+  const { currentUser, transactions, notifications, startResendTransaction } = useApp();
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
   const [isChargeModalOpen, setIsChargeModalOpen] = useState(false);
@@ -239,7 +239,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
                         </div>
                       )}
                       {!t.adminPin && (
-                        <div className="mt-1">
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                           <button
                             type="button"
                             onClick={e => {
@@ -251,6 +251,28 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
                             <FileText className="w-3 h-3 text-blue-300" />
                             <span>Receipt</span>
                           </button>
+
+                          {t.status === 'rejected' && t.type === 'send' && (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                startResendTransaction(t);
+                              }}
+                              className="text-[10px] bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
+                            >
+                              <RotateCcw className="w-3 h-3 text-white" />
+                              <span>Resend & Correct</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Rejection Cause Callout */}
+                      {t.status === 'rejected' && t.rejectionReason && (
+                        <div className="mt-1.5 p-1.5 bg-rose-50 border border-rose-200 rounded-lg text-[9px] text-rose-800 font-semibold flex items-start gap-1">
+                          <AlertCircle className="w-3 h-3 text-rose-600 shrink-0 mt-0.5" />
+                          <span className="break-words">Reject: {t.rejectionReason}</span>
                         </div>
                       )}
 

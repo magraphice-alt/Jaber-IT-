@@ -13,19 +13,7 @@ import { HomeScreenInstallWidget } from './components/HomeScreenInstallWidget';
 import { OperationSuccessAlert } from './components/OperationSuccessAlert';
 
 const MainAppContent: React.FC = () => {
-  const { currentUser } = useApp();
-  // Automatically start on the 'send' (Send Money) interface when user logs into dashboard
-  const [activeUserTab, setActiveUserTab] = useState<UserTab>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab') as UserTab;
-      if (tabParam && ['balance', 'send', 'deposit', 'statement', 'profile'].includes(tabParam)) {
-        return tabParam;
-      }
-    }
-    return 'send'; // Auto show Send Money interface by default
-  });
-
+  const { currentUser, activeUserTab, setActiveUserTab } = useApp();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   // Automatically reset to Send Money interface whenever a normal user logs in

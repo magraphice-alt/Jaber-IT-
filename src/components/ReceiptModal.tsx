@@ -10,6 +10,9 @@ import {
   Printer,
   Mail,
   CheckCircle2,
+  AlertCircle,
+  XCircle,
+  RotateCcw,
   ShieldCheck,
   Share2,
   Copy,
@@ -28,7 +31,7 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose }) => {
-  const { users, currentUser } = useApp();
+  const { users, currentUser, startResendTransaction } = useApp();
   const [copiedText, setCopiedText] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
@@ -73,7 +76,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 *Txn ID:* ${transaction.id}
 *Date:* ${receiptDate}
 *Status:* ${transaction.status.toUpperCase()}
-*Transfer Type:* ${transaction.type.toUpperCase()}
+${transaction.rejectionReason ? `*Reject Cause / Reason:* ${transaction.rejectionReason}\n` : ''}*Transfer Type:* ${transaction.type.toUpperCase()}
 *Method:* ${transaction.method}
 ${transaction.recipientMobile ? `*Target Number:* ${transaction.recipientMobile}\n` : ''}${
     transaction.adminPin ? `*Admin Security PIN:* ${transaction.adminPin}\n` : ''
@@ -408,10 +411,46 @@ Thank you - Masud Telecom
                       : 'text-rose-700'
                   }`}
                 >
-                  <CheckCircle2 className="w-3 h-3" />
+                  {transaction.status === 'rejected' ? (
+                    <XCircle className="w-3 h-3 text-rose-600" />
+                  ) : (
+                    <CheckCircle2 className="w-3 h-3" />
+                  )}
                   {transaction.status}
                 </span>
               </div>
+
+              {/* Reject Cause / Reason Field on Receipt */}
+              {(transaction.status === 'rejected' || transaction.rejectionReason) && (
+                <div className="pt-1.5 pb-1">
+                  <div className="bg-rose-50 rounded-xl p-2.5 border-2 border-rose-300 text-left space-y-1.5 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-rose-700 font-extrabold text-[9px] uppercase tracking-wider">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span>Reject Cause / Reason:</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-rose-950 break-words whitespace-pre-wrap leading-relaxed bg-white p-2 rounded-lg border border-rose-200 shadow-2xs">
+                      {transaction.rejectionReason || 'Declined by Admin'}
+                    </p>
+
+                    {/* Button under the Reject Field: Resend & Correct Number */}
+                    {transaction.type === 'send' && (
+                      <div className="pt-1 no-print">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            startResendTransaction(transaction);
+                            onClose();
+                          }}
+                          className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 active:scale-95 text-white py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all border border-rose-400"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-white shrink-0" />
+                          <span>Resend & Correct Number</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* User Note / Comment Box */}
               {transaction.comment && (
@@ -453,6 +492,23 @@ Thank you - Masud Telecom
 
         {/* BOTTOM ACTION BUTTONS - Single line, 8px font size */}
         <div className="bg-white px-2 py-2 border-t border-slate-200 no-print">
+          {/* Quick Resend & Correct Action in Footer */}
+          {transaction.status === 'rejected' && transaction.type === 'send' && (
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={() => {
+                  startResendTransaction(transaction);
+                  onClose();
+                }}
+                className="w-full bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-extrabold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all cursor-pointer border border-rose-400"
+              >
+                <RotateCcw className="w-4 h-4 text-white" />
+                <span>Resend & Correct Number</span>
+              </button>
+            </div>
+          )}
+
           <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider text-center mb-1.5">
             Send Receipt via Photo / PDF / Messaging:
           </p>

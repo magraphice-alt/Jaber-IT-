@@ -56,6 +56,15 @@ export interface NotificationItem {
   txnId?: string;
 }
 
+export interface ResendDraftData {
+  recipientMobile: string;
+  amount: number;
+  method?: TransferMethod;
+  comment?: string;
+  originalTxnId?: string;
+  rejectionReason?: string;
+}
+
 export interface SystemSettings {
   defaultCommissionRate: number; // e.g., 2.5%
   companyName: string;

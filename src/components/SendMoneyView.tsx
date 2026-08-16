@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ArrowLeft,
@@ -9,6 +9,8 @@ import {
   Send as SendIcon,
   CheckCircle2,
   AlertCircle,
+  RotateCcw,
+  X,
   MessageCircle,
   Users,
   ExternalLink,
@@ -32,7 +34,7 @@ interface SendMoneyViewProps {
 }
 
 export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNotifications }) => {
-  const { createSendRequest, notifications, currentUser, users, settings } = useApp();
+  const { createSendRequest, notifications, currentUser, users, settings, resendDraft, clearResendDraft } = useApp();
 
   const [mobileNumber, setMobileNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -41,6 +43,26 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Auto-populate when Resend & Correct Number is triggered
+  useEffect(() => {
+    if (resendDraft) {
+      if (resendDraft.recipientMobile) {
+        setMobileNumber(resendDraft.recipientMobile.replace(/\D/g, '').slice(0, 11));
+      }
+      if (resendDraft.amount) {
+        setAmount(resendDraft.amount.toString());
+      }
+      if (resendDraft.method) {
+        setMethod(resendDraft.method);
+      }
+      if (resendDraft.comment) {
+        setComment(resendDraft.comment);
+      }
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
+  }, [resendDraft]);
 
   // WhatsApp Auto-Message & Modal State
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -137,6 +159,7 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
         setAmount('');
         setMethod('');
         setComment('');
+        clearResendDraft();
       } else {
         setErrorMsg('Failed to process request. Please check balance or try again.');
       }
@@ -264,6 +287,52 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Resending Previous Request (Correct & Resend) Banner */}
+          {resendDraft && (
+            <div className="bg-gradient-to-r from-rose-50 via-amber-50 to-rose-50 border-2 border-rose-300/80 rounded-2xl p-3.5 text-slate-900 shadow-sm animate-in fade-in">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 border border-rose-300 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <RotateCcw className="w-4 h-4 text-rose-700" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs font-black text-rose-800 uppercase tracking-wide">
+                        Resending Previous Request
+                      </h4>
+                      {resendDraft.originalTxnId && (
+                        <span className="bg-white text-rose-700 text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md border border-rose-200 shadow-2xs">
+                          {resendDraft.originalTxnId}
+                        </span>
+                      )}
+                    </div>
+                    {resendDraft.rejectionReason && (
+                      <div className="mt-1.5 bg-white p-2 rounded-xl border border-rose-200/90 shadow-2xs">
+                        <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block">
+                          Admin Reject Reason:
+                        </span>
+                        <p className="text-xs font-semibold text-rose-950 mt-0.5 leading-snug">
+                          {resendDraft.rejectionReason}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-[11px] text-slate-600 font-medium mt-1.5 leading-relaxed">
+                      Your number and amount figure are pre-filled below. You can now correct the mobile number or details and submit a new request.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => clearResendDraft()}
+                  title="Dismiss pre-fill"
+                  className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 

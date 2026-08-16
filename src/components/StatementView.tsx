@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter } from 'lucide-react';
+import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter, RotateCcw } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
@@ -13,7 +13,7 @@ interface StatementViewProps {
 }
 
 export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotifications }) => {
-  const { transactions, currentUser, notifications } = useApp();
+  const { transactions, currentUser, notifications, startResendTransaction } = useApp();
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
 
@@ -409,8 +409,37 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                       />
                     )}
 
-                    {/* Last: View Receipt Button */}
-                    <div className="pt-1.5 border-t border-slate-100 flex justify-end">
+                    {/* Rejection Reason Callout */}
+                    {t.status === 'rejected' && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[9px] space-y-1">
+                        <div className="flex items-center gap-1 text-rose-700 font-extrabold uppercase">
+                          <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                          <span>Reject Cause / Reason:</span>
+                        </div>
+                        <p className="font-semibold text-rose-950 bg-white p-1.5 rounded-md border border-rose-200">
+                          {t.rejectionReason || 'Declined by Admin'}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Action Buttons: View Receipt and Resend */}
+                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div>
+                        {t.status === 'rejected' && t.type === 'send' && (
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              startResendTransaction(t);
+                            }}
+                            className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                          >
+                            <RotateCcw className="w-3 h-3 text-white shrink-0" />
+                            <span>Resend & Correct</span>
+                          </button>
+                        )}
+                      </div>
+
                       <button
                         type="button"
                         onClick={e => {

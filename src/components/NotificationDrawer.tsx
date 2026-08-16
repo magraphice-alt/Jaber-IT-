@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText, RotateCcw } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { Transaction } from '../types';
 
@@ -10,7 +10,7 @@ interface NotificationDrawerProps {
 }
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, onClose }) => {
-  const { notifications, transactions, currentUser, markNotificationRead, deleteNotification, clearNotifications } = useApp();
+  const { notifications, transactions, currentUser, markNotificationRead, deleteNotification, clearNotifications, startResendTransaction } = useApp();
   const [activeReceiptTxn, setActiveReceiptTxn] = useState<Transaction | null>(null);
 
   if (!isOpen) return null;
@@ -90,17 +90,34 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, 
                         <p className="text-xs leading-relaxed text-slate-600 mb-2">{n.message}</p>
 
                         {matchedTxn && (
-                          <button
-                            type="button"
-                            onClick={e => {
-                              e.stopPropagation();
-                              setActiveReceiptTxn(matchedTxn);
-                            }}
-                            className="bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors mt-1"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-blue-300" />
-                            <span>View Money Receipt</span>
-                          </button>
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setActiveReceiptTxn(matchedTxn);
+                              }}
+                              className="bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-blue-300" />
+                              <span>View Receipt</span>
+                            </button>
+
+                            {matchedTxn.status === 'rejected' && matchedTxn.type === 'send' && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  startResendTransaction(matchedTxn);
+                                  onClose();
+                                }}
+                                className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-white" />
+                                <span>Resend & Correct</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
 

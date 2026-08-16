@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { User, Transaction, NotificationItem, SystemSettings, TransferMethod } from '../types';
+import { User, Transaction, NotificationItem, SystemSettings, TransferMethod, ResendDraftData } from '../types';
 import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
 import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
@@ -11,6 +11,8 @@ import {
   triggerQuickHaptic,
   updateAppBadge
 } from '../utils/notificationSound';
+
+export type UserTabType = 'balance' | 'send' | 'deposit' | 'statement' | 'profile';
 
 export interface OperationAlertState {
   visible: boolean;
@@ -25,6 +27,12 @@ interface AppContextType {
   notifications: NotificationItem[];
   settings: SystemSettings;
   operationSuccessAlert: OperationAlertState;
+  activeUserTab: UserTabType;
+  setActiveUserTab: (tab: UserTabType) => void;
+  resendDraft: ResendDraftData | null;
+  setResendDraft: (draft: ResendDraftData | null) => void;
+  clearResendDraft: () => void;
+  startResendTransaction: (txn: Transaction) => void;
   triggerOperationSuccess: (message?: string, subMessage?: string) => void;
   login: (email: string, pass: string) => { success: boolean; message?: string };
   logout: () => void;
@@ -106,6 +114,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY_AUTH);
     return saved ? JSON.parse(saved) : null;
   });
+
+  // Active User Tab state shared across views
+  const [activeUserTab, setActiveUserTab] = useState<UserTabType>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab') as UserTabType;
+      if (tabParam && ['balance', 'send', 'deposit', 'statement', 'profile'].includes(tabParam)) {
+        return tabParam;
+      }
+    }
+    return 'send';
+  });
+
+  // Resend & Correct draft state for pre-filling send box after admin rejection
+  const [resendDraft, setResendDraft] = useState<ResendDraftData | null>(null);
+
+  const startResendTransaction = (txn: Transaction) => {
+    setResendDraft({
+      recipientMobile: txn.recipientMobile || '',
+      amount: txn.amount || 0,
+      method: txn.method,
+      comment: txn.comment || '',
+      originalTxnId: txn.id,
+      rejectionReason: txn.rejectionReason || 'Declined by Admin'
+    });
+    setActiveUserTab('send');
+    playSuccessChime();
+    triggerQuickHaptic();
+  };
+
+  const clearResendDraft = () => {
+    setResendDraft(null);
+  };
 
   // Global 1-second operation success display alert state
   const [operationSuccessAlert, setOperationSuccessAlert] = useState<OperationAlertState>({
@@ -1006,6 +1047,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notifications,
         settings,
         operationSuccessAlert,
+        activeUserTab,
+        setActiveUserTab,
+        resendDraft,
+        setResendDraft,
+        clearResendDraft,
+        startResendTransaction,
         triggerOperationSuccess,
         login,
         logout,
