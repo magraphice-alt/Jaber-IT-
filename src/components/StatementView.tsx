@@ -381,25 +381,39 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                       </div>
                     </div>
 
-                    {/* Target Number & Admin Security PIN (Under the send money amount) */}
-                    {(t.recipientMobile || t.adminPin) && (
-                      <div className="bg-slate-50/70 rounded-xl p-2 border border-slate-200 text-[9px] space-y-1 my-1">
-                        {t.recipientMobile && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase">Target Number:</span>
-                            <span className="font-mono font-bold text-slate-900 text-[9px]">{t.recipientMobile}</span>
-                          </div>
-                        )}
-                        {t.adminPin && (
-                          <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase">Admin Security PIN:</span>
-                            <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[9px]">
-                              🔑 {t.adminPin}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Target Number, Approved PIN, and Receipt in ONE LINE */}
+                    <div className="bg-slate-50/90 border border-slate-200 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 flex-wrap text-[10px] my-1 shadow-2xs">
+                      {/* Target Number */}
+                      {t.recipientMobile && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Target Number:</span>
+                          <span className="font-mono font-black text-slate-900 text-xs">{t.recipientMobile}</span>
+                        </div>
+                      )}
+
+                      {/* Approved PIN */}
+                      {t.adminPin && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Approved PIN:</span>
+                          <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-xs">
+                            🔑 {t.adminPin}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Receipt Action Button */}
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedReceiptTxn(t);
+                        }}
+                        className="bg-blue-900 hover:bg-blue-800 text-white text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs shrink-0 ml-auto"
+                      >
+                        <FileText className="w-3 h-3 text-blue-300" />
+                        <span>Receipt</span>
+                      </button>
+                    </div>
 
                     {/* Pending Send Widget with 10-Min Timer Bar */}
                     {t.status === 'pending' && (
@@ -409,9 +423,9 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                       />
                     )}
 
-                    {/* Rejection Reason Callout */}
+                    {/* Rejection Reason Callout & Resend Action */}
                     {t.status === 'rejected' && (
-                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[9px] space-y-1">
+                      <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 text-[9px] space-y-1.5">
                         <div className="flex items-center gap-1 text-rose-700 font-extrabold uppercase">
                           <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
                           <span>Reject Cause / Reason:</span>
@@ -419,49 +433,33 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                         <p className="font-semibold text-rose-950 bg-white p-1.5 rounded-md border border-rose-200">
                           {t.rejectionReason || 'Declined by Admin'}
                         </p>
-                      </div>
-                    )}
-
-                    {/* Action Buttons: View Receipt and Resend */}
-                    <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <div>
-                        {t.status === 'rejected' && t.type === 'send' && (
-                          t.isResent ? (
-                            <span
-                              title={`Already resent & corrected${t.resentTxnId ? ` as ${t.resentTxnId}` : ''}`}
-                              className="bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-2xs cursor-not-allowed"
-                            >
-                              <Lock className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span>Resent & Locked</span>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={e => {
-                                e.stopPropagation();
-                                startResendTransaction(t);
-                              }}
-                              className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-                            >
-                              <RotateCcw className="w-3 h-3 text-white shrink-0" />
-                              <span>Resend & Correct</span>
-                            </button>
-                          )
+                        {t.type === 'send' && (
+                          <div className="pt-1 flex justify-end">
+                            {t.isResent ? (
+                              <span
+                                title={`Already resent & corrected${t.resentTxnId ? ` as ${t.resentTxnId}` : ''}`}
+                                className="bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-2xs cursor-not-allowed"
+                              >
+                                <Lock className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span>Resent & Locked</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  startResendTransaction(t);
+                                }}
+                                className="bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-[9px] font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                              >
+                                <RotateCcw className="w-3 h-3 text-white shrink-0" />
+                                <span>Resend & Correct</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setSelectedReceiptTxn(t);
-                        }}
-                        className="bg-blue-900 hover:bg-blue-800 text-white text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
-                      >
-                        <FileText className="w-3 h-3 text-blue-300" />
-                        <span>View Receipt</span>
-                      </button>
-                    </div>
+                    )}
                   </div>
                 );
               })}

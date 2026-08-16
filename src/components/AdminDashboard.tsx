@@ -33,8 +33,11 @@ import {
   Trash2,
   Plus,
   AlertTriangle,
+  AlertCircle,
+  EyeOff,
   MinusCircle,
   Download,
+  RotateCcw,
   MapPin,
   MessageSquare,
   Link as LinkIcon,
@@ -297,6 +300,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   // Live Bangladesh Clock (BST)
   const [bdClock, setBdClock] = useState(getLiveBDClock());
 
+  // Metric Figures Erase/Restore State (Checkpoint Timestamp & Security Verification)
+  const [eraseCheckpointTime, setEraseCheckpointTime] = useState<string | null>(() => {
+    return localStorage.getItem('admin_metrics_erased_at');
+  });
+  const [securityModalAction, setSecurityModalAction] = useState<'erase' | 'restore' | null>(null);
+  const [erasePassword, setErasePassword] = useState<string>('');
+  const [eraseError, setEraseError] = useState<string | null>(null);
+  const [showErasePasswordText, setShowErasePasswordText] = useState<boolean>(false);
+
+  const handleSecurityActionSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (erasePassword === 'Jaber@1780') {
+      if (securityModalAction === 'erase') {
+        const nowIso = new Date().toISOString();
+        setEraseCheckpointTime(nowIso);
+        localStorage.setItem('admin_metrics_erased_at', nowIso);
+      } else if (securityModalAction === 'restore') {
+        setEraseCheckpointTime(null);
+        localStorage.removeItem('admin_metrics_erased_at');
+      }
+      setSecurityModalAction(null);
+      setErasePassword('');
+      setEraseError(null);
+    } else {
+      setEraseError('Incorrect password! Access denied.');
+    }
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setBdClock(getLiveBDClock());
@@ -308,19 +339,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   const approvedTxns = transactions.filter(t => t.status === 'approved');
   const pendingTxns = transactions.filter(t => t.status === 'pending');
 
-  const totalSendAmount = approvedTxns
+  // Filter approved transactions based on erase checkpoint (counting all new transactions after erase)
+  const metricApprovedTxns = eraseCheckpointTime
+    ? approvedTxns.filter(t => {
+        const txnTime = new Date(t.approvedAt || t.createdAt).getTime();
+        const eraseTime = new Date(eraseCheckpointTime).getTime();
+        return txnTime >= eraseTime;
+      })
+    : approvedTxns;
+
+  const totalSendAmount = metricApprovedTxns
     .filter(t => t.type === 'send')
     .reduce((acc, t) => acc + t.amount, 0);
 
-  // Today's send strictly starting from Bangladesh Time 6:00 AM
-  const todaySendAmount = approvedTxns
+  // Today's send strictly starting from Bangladesh Time 6:00 AM (and after erase timestamp if set)
+  const todaySendAmount = metricApprovedTxns
     .filter(t => t.type === 'send' && isBDToday(t.createdAt))
     .reduce((acc, t) => acc + t.amount, 0);
 
   const totalCommissionAmount = (totalSendAmount / 1000) * 7.5;
 
-  const approvedTkAmount = totalSendAmount; // Approved Send total
-  const approvedDepositAmount = approvedTxns
+  const approvedTkAmount = totalSendAmount; // Approved Send total after erase
+  const approvedDepositAmount = metricApprovedTxns
     .filter(t => t.type === 'deposit')
     .reduce((acc, t) => acc + t.amount, 0);
 
@@ -367,6 +407,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   const handleDeleteUserConfirmed = () => {
     if (!userToDelete) return;
     setDeleteErrorMsg(null);
+
+    // Auto-generate and download full user Statement PDF before deleting user profile
+    const userTxns = transactions.filter(t => t.userId === userToDelete.id);
+    try {
+      generateStatementPDF({
+        user: {
+          name: userToDelete.name,
+          mobile: userToDelete.mobile,
+          email: userToDelete.email,
+          address: userToDelete.address,
+          balance: userToDelete.balance,
+          totalCommission: userToDelete.totalCommission,
+          commissionRate: userToDelete.commissionRate
+        },
+        transactions: userTxns,
+        filterInfo: {
+          type: 'ALL'
+        }
+      });
+    } catch (err) {
+      console.warn('Auto PDF statement generation on delete failed:', err);
+    }
+
     const res = deleteUserAccount(userToDelete.id);
     if (res.success) {
       if (selectedUserId === userToDelete.id) {
@@ -459,77 +522,118 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
               </div>
             </div>
 
-            {/* Real-time Wireframe Metric Grid Table (Matching Screenshot - Font Size 8) */}
-            <div className="bg-white rounded-lg border-2 border-slate-800 overflow-hidden shadow-xs max-w-xl mx-auto">
-              <div className="divide-y-2 divide-slate-800 text-[8px]">
-                {/* Total Send */}
-                <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
-                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900">Total Send</div>
-                  <div className="px-2 py-1 bg-white text-[8px] font-black text-slate-900 font-mono">
-                    ৳{totalSendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
-                  </div>
+            {/* Real-time Metric Grid Table (Compact Size with Erase Button on Side) */}
+            <div className="max-w-md mx-auto space-y-1">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Metrics</span>
+                <div className="flex items-center gap-1.5">
+                  {eraseCheckpointTime && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setErasePassword('');
+                        setEraseError(null);
+                        setSecurityModalAction('restore');
+                      }}
+                      title="Restore full all-time calculation"
+                      className="text-[8px] font-bold text-blue-800 hover:text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-2.5 h-2.5" />
+                      <span>Restore All-Time</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErasePassword('');
+                      setEraseError(null);
+                      setSecurityModalAction('erase');
+                    }}
+                    className="text-[8px] font-bold text-rose-700 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-300 px-2 py-0.5 rounded cursor-pointer transition-all shadow-2xs flex items-center gap-1"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                    <span>Erase</span>
+                  </button>
                 </div>
+              </div>
 
-                {/* Today Send */}
-                <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
-                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900">Today Send</div>
-                  <div className="px-2 py-1 bg-white text-[8px] font-black text-blue-900 font-mono">
-                    ৳{todaySendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+              <div className="bg-white rounded-lg border-2 border-slate-800 overflow-hidden shadow-xs">
+                <div className="divide-y-2 divide-slate-800 text-[8px]">
+                  {/* Total Send */}
+                  <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
+                    <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900 flex items-center justify-between">
+                      <span>Total Send</span>
+                      {eraseCheckpointTime && <span className="text-[7px] text-amber-700 font-bold bg-amber-100 px-1 rounded">New</span>}
+                    </div>
+                    <div className="px-2 py-1 bg-white text-[8px] font-black text-slate-900 font-mono">
+                      ৳{totalSendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                    </div>
                   </div>
-                </div>
 
-                {/* Commission Rate Row */}
-                <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 items-center">
-                  <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900 border-r border-slate-800">
-                    Commission Rate
+                  {/* Today Send */}
+                  <div className="grid grid-cols-2 bg-slate-200/90 divide-x-2 divide-slate-800 items-center">
+                    <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900 flex items-center justify-between">
+                      <span>Today Send</span>
+                      {eraseCheckpointTime && <span className="text-[7px] text-amber-700 font-bold bg-amber-100 px-1 rounded">New</span>}
+                    </div>
+                    <div className="px-2 py-1 bg-white text-[8px] font-black text-blue-900 font-mono">
+                      ৳{todaySendAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                    </div>
                   </div>
-                  <div className="px-2 py-1 bg-white flex items-center justify-between gap-1">
-                    {isEditingRate ? (
-                      <div className="flex items-center gap-1 w-full">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={rateInput}
-                          onChange={e => setRateInput(e.target.value)}
-                          className="w-12 bg-slate-100 border border-slate-400 rounded px-1 py-0.5 text-[8px] font-bold text-slate-900"
-                        />
-                        <span className="text-[8px] font-bold">%</span>
-                        <button
-                          onClick={handleSaveRate}
-                          className="bg-emerald-600 text-white p-0.5 rounded hover:bg-emerald-700 cursor-pointer"
-                        >
-                          <Save className="w-2.5 h-2.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <span className="text-[8px] font-black text-blue-950 font-mono">
-                          {settings.defaultCommissionRate}%
-                        </span>
-                        <button
-                          onClick={() => setIsEditingRate(true)}
-                          className="text-[8px] text-blue-900 font-semibold underline flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <Edit2 className="w-2 h-2" /> Edit
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Approved Tk & Approved Diposit Header */}
-                <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 text-center text-[8px] font-extrabold text-slate-900">
-                  <div className="px-2 py-1 bg-slate-300">Approved Tk</div>
-                  <div className="px-2 py-1 bg-slate-300">Approved Diposit</div>
-                </div>
-
-                {/* Approved Values Row */}
-                <div className="grid grid-cols-2 divide-x-2 divide-slate-800 bg-white font-mono font-bold text-[8px] text-center">
-                  <div className="px-2 py-1 text-slate-900">
-                    ৳{approvedTkAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                  {/* Commission Rate Row */}
+                  <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 items-center">
+                    <div className="px-2 py-1 text-[8px] font-extrabold text-slate-900 border-r border-slate-800">
+                      Commission Rate
+                    </div>
+                    <div className="px-2 py-1 bg-white flex items-center justify-between gap-1">
+                      {isEditingRate ? (
+                        <div className="flex items-center gap-1 w-full">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={rateInput}
+                            onChange={e => setRateInput(e.target.value)}
+                            className="w-12 bg-slate-100 border border-slate-400 rounded px-1 py-0.5 text-[8px] font-bold text-slate-900"
+                          />
+                          <span className="text-[8px] font-bold">%</span>
+                          <button
+                            onClick={handleSaveRate}
+                            className="bg-emerald-600 text-white p-0.5 rounded hover:bg-emerald-700 cursor-pointer"
+                          >
+                            <Save className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-[8px] font-black text-blue-950 font-mono">
+                            {settings.defaultCommissionRate}%
+                          </span>
+                          <button
+                            onClick={() => setIsEditingRate(true)}
+                            className="text-[8px] text-blue-900 font-semibold underline flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Edit2 className="w-2 h-2" /> Edit
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="px-2 py-1 text-emerald-800">
-                    ৳{approvedDepositAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+
+                  {/* Approved Tk & Approved Diposit Header */}
+                  <div className="grid grid-cols-2 bg-slate-300 divide-x-2 divide-slate-800 text-center text-[8px] font-extrabold text-slate-900">
+                    <div className="px-2 py-1 bg-slate-300">Approved Tk</div>
+                    <div className="px-2 py-1 bg-slate-300">Approved Diposit</div>
+                  </div>
+
+                  {/* Approved Values Row */}
+                  <div className="grid grid-cols-2 divide-x-2 divide-slate-800 bg-white font-mono font-bold text-[8px] text-center">
+                    <div className="px-2 py-1 text-slate-900">
+                      ৳{approvedTkAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="px-2 py-1 text-emerald-800">
+                      ৳{approvedDepositAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -625,67 +729,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                           </div>
 
                           <div className="text-xs text-slate-600">
-                            {t.recipientMobile && (
-                              <div className="bg-white p-2.5 rounded-xl border border-amber-200 mt-1 mb-1.5 shadow-2xs space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <div className="min-w-0 pr-2">
-                                    <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider">Target Number</span>
-                                    <span className="text-sm font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
+                            {(t.recipientMobile || t.adminPin) && (
+                              <div className="bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 mt-1 mb-1.5 shadow-2xs flex items-center justify-between gap-2 flex-wrap">
+                                {/* Target Number */}
+                                {t.recipientMobile && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Target Number:</span>
+                                    <span className="text-xs font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyNumber(t.recipientMobile!)}
+                                      title="Copy Target Number"
+                                      className="text-slate-400 hover:text-blue-900 p-0.5 rounded transition-colors cursor-pointer"
+                                    >
+                                      {copiedNumber === t.recipientMobile ? (
+                                        <Check className="w-3 h-3 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyNumber(t.recipientMobile!)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0 shadow-xs"
-                                  >
-                                    {copiedNumber === t.recipientMobile ? (
-                                      <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                        <span className="text-emerald-300 font-bold">Copied!</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3.5 h-3.5 text-blue-200" />
-                                        <span>Copy Number</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
+                                )}
+
+                                {/* Approved PIN */}
                                 {t.adminPin && (
-                                  <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Admin Approved PIN:</span>
-                                    <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved PIN:</span>
+                                    <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                       🔑 {t.adminPin}
                                     </span>
                                   </div>
                                 )}
-                                <div className="pt-1.5 border-t border-slate-100 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedReceiptTxn(t)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                  >
-                                    <FileText className="w-3 h-3 text-blue-300" />
-                                    <span>Receipt</span>
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            {t.adminPin && !t.recipientMobile && (
-                              <div className="flex items-center justify-between bg-emerald-50 p-2 rounded-xl border border-emerald-200 mt-1 mb-1.5">
-                                <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Admin Approved PIN</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-mono font-black text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-300">
-                                    🔑 {t.adminPin}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedReceiptTxn(t)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                  >
-                                    <FileText className="w-3 h-3 text-blue-300" />
-                                    <span>Receipt</span>
-                                  </button>
-                                </div>
+
+                                {/* Receipt Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedReceiptTxn(t)}
+                                  className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0 ml-auto"
+                                >
+                                  <FileText className="w-3 h-3 text-blue-300" />
+                                  <span>Receipt</span>
+                                </button>
                               </div>
                             )}
                             {t.comment && <div className="text-slate-700">Note: {t.comment}</div>}
@@ -1618,49 +1702,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                               )}
                             </div>
 
-                            {t.recipientMobile && (
-                              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 mt-1 mb-1 space-y-1">
-                                <div>
-                                  <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider">Target Number</span>
-                                  <span className="text-sm font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
-                                </div>
+                            {(t.recipientMobile || t.adminPin) && (
+                              <div className="bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 mt-1 mb-1 shadow-2xs flex items-center justify-between gap-2 flex-wrap">
+                                {/* Target Number */}
+                                {t.recipientMobile && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Target Number:</span>
+                                    <span className="text-xs font-mono font-black text-slate-900 tracking-wide">{t.recipientMobile}</span>
+                                  </div>
+                                )}
+
+                                {/* Approved PIN */}
                                 {t.adminPin && (
-                                  <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between">
+                                  <div className="flex items-center gap-1 shrink-0">
                                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Approved PIN:</span>
-                                    <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                    <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                                       🔑 {t.adminPin}
                                     </span>
                                   </div>
                                 )}
-                                <div className="pt-1.5 border-t border-slate-200 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedReceiptTxn(t)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                  >
-                                    <FileText className="w-3 h-3 text-blue-300" />
-                                    <span>Receipt</span>
-                                  </button>
-                                </div>
-                              </div>
-                            )}
 
-                            {t.adminPin && !t.recipientMobile && (
-                              <div className="flex items-center justify-between bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 mt-1 mb-1">
-                                <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Approved PIN</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-mono font-black text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-300">
-                                    🔑 {t.adminPin}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedReceiptTxn(t)}
-                                    className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                  >
-                                    <FileText className="w-3 h-3 text-blue-300" />
-                                    <span>Receipt</span>
-                                  </button>
-                                </div>
+                                {/* Receipt Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedReceiptTxn(t)}
+                                  className="bg-blue-900 hover:bg-blue-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0 ml-auto"
+                                >
+                                  <FileText className="w-3 h-3 text-blue-300" />
+                                  <span>Receipt</span>
+                                </button>
                               </div>
                             )}
 
@@ -2675,9 +2745,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
               </div>
             </div>
 
-            <p className="text-xs text-rose-800 font-semibold bg-rose-50 p-2.5 rounded-xl border border-rose-200/80">
-              ⚠️ Warning: Deleting this account will permanently remove this user profile.
-            </p>
+            <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 space-y-1">
+              <p className="text-xs text-rose-800 font-semibold">
+                ⚠️ Warning: Deleting this account will permanently remove this user profile.
+              </p>
+              <p className="text-[11px] text-amber-800 font-medium flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>An official PDF Statement will be auto-downloaded upon deletion for record-keeping.</span>
+              </p>
+            </div>
 
             <div className="flex gap-2 pt-1">
               <button
@@ -2695,6 +2771,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Erase / Restore Metrics Figures Security Password Modal */}
+      {securityModalAction && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-xs w-full p-4 space-y-3.5 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b pb-2.5 border-slate-100">
+              <div className={`flex items-center gap-1.5 font-extrabold text-sm ${securityModalAction === 'erase' ? 'text-rose-600' : 'text-blue-900'}`}>
+                {securityModalAction === 'erase' ? (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 text-blue-900 shrink-0" />
+                )}
+                <span>{securityModalAction === 'erase' ? 'Erase Verification' : 'Restore Verification'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSecurityModalAction(null);
+                  setErasePassword('');
+                  setEraseError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {securityModalAction === 'erase'
+                ? 'Enter Admin Password to erase money figures and start new counting from this checkpoint:'
+                : 'Enter Admin Password to restore all-time money figures and transaction history:'}
+            </p>
+
+            <form onSubmit={handleSecurityActionSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Demand Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showErasePasswordText ? 'text' : 'password'}
+                    value={erasePassword}
+                    onChange={e => {
+                      setErasePassword(e.target.value);
+                      setEraseError(null);
+                    }}
+                    placeholder="Enter Security Password"
+                    className={`w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:bg-white pr-9 ${
+                      securityModalAction === 'erase'
+                        ? 'border-slate-300 focus:ring-rose-500'
+                        : 'border-slate-300 focus:ring-blue-600'
+                    }`}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowErasePasswordText(!showErasePasswordText)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1"
+                    title={showErasePasswordText ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showErasePasswordText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {eraseError && (
+                  <div className="mt-1.5 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold rounded-lg flex items-center gap-1.5 animate-in fade-in">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span>{eraseError}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="submit"
+                  className={`flex-1 text-white font-extrabold py-2 rounded-xl text-xs transition-all shadow-xs cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 ${
+                    securityModalAction === 'erase'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-blue-900 hover:bg-blue-800'
+                  }`}
+                >
+                  {securityModalAction === 'erase' ? (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Confirm Erase</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Confirm Restore</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecurityModalAction(null);
+                    setErasePassword('');
+                    setEraseError(null);
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

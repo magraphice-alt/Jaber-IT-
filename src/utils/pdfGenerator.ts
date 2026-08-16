@@ -48,31 +48,25 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
   doc.setTextColor(30, 58, 138);
   doc.text('MASUD TELECOM', 14, 20);
 
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 116, 139);
-  doc.text('Official Digital Money Transfer & Commission Statement', 14, 26);
-  doc.text('Helpline: +880 1700-000000 | Dhaka, Bangladesh', 14, 31);
-
   // Statement Label on Right
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(30, 58, 138);
-  doc.text('ACCOUNT STATEMENT', pageWidth - 14, 20, { align: 'right' });
+  doc.text('ACCOUNT STATEMENT', pageWidth - 14, 18, { align: 'right' });
 
   const generatedDateStr = formatBDDateTime(new Date(), true);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text(`Generated: ${generatedDateStr}`, pageWidth - 14, 26, { align: 'right' });
+  doc.text(`Generated: ${generatedDateStr}`, pageWidth - 14, 24, { align: 'right' });
 
   // Divider Line
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.5);
-  doc.line(14, 35, pageWidth - 14, 35);
+  doc.line(14, 28, pageWidth - 14, 28);
 
   // 3. Customer Info Box
-  let startY = 40;
+  let startY = 32;
 
   // 4. Sort Transactions in Strict Chronological Order (First transaction on First Line, Last on Last Line)
   const sortedTxns = [...transactions].sort(
@@ -158,19 +152,15 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
     : displayCommission;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Opening Balance: Tk. ${formatCurrency(openingBalance)}`, pageWidth - 18, startY + 6.5, { align: 'right' });
-
-  doc.setFontSize(9.5);
+  doc.setFontSize(10);
   doc.setTextColor(30, 58, 138);
-  doc.text(`Closing Balance: Tk. ${formatCurrency(currentBalance)}`, pageWidth - 18, startY + 13.5, { align: 'right' });
+  doc.text(`Closing Balance: Tk. ${formatCurrency(currentBalance)}`, pageWidth - 18, startY + 9, { align: 'right' });
 
   doc.setFontSize(8.5);
   doc.setTextColor(217, 119, 6);
-  doc.text(`Total Commission: Tk. ${formatCurrency(userTotalCommission)}`, pageWidth - 18, startY + 20.5, { align: 'right' });
+  doc.text(`Total Commission: Tk. ${formatCurrency(userTotalCommission)}`, pageWidth - 18, startY + 18, { align: 'right' });
 
-  startY += 32;
+  startY += 30;
 
   // Running Ledger Balance Calculator (Debit Minus -, Credit Plus +)
   let rollingBal = openingBalance;
@@ -289,60 +279,6 @@ export const generateStatementPDF = ({ user, transactions, filterInfo }: Generat
       );
     }
   });
-
-  // 6. Attached Summary Area DIRECTLY UNDER the Table Finish Line
-  const finalTableY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : startY + 60;
-  let summaryY = finalTableY;
-
-  // If near page bottom, add a new page so summary stays intact
-  if (summaryY > doc.internal.pageSize.getHeight() - 40) {
-    doc.addPage();
-    summaryY = 20;
-  }
-
-  // Summary Container Box attached under table finish line
-  const summaryBoxHeight = 14;
-  doc.setFillColor(241, 245, 249); // Clean slate background
-  doc.rect(10, summaryY, 190, summaryBoxHeight, 'F');
-  
-  // Double-line finish border (Standard Financial Statement Finishing Line)
-  doc.setDrawColor(15, 23, 42); // Dark Navy / Slate Finish
-  doc.setLineWidth(0.6);
-  doc.line(10, summaryY, 200, summaryY); // Top finish line attached to table bottom
-  doc.line(10, summaryY + summaryBoxHeight, 200, summaryY + summaryBoxHeight); // Bottom line
-  doc.setLineWidth(0.2);
-  doc.line(10, summaryY + summaryBoxHeight + 0.8, 200, summaryY + summaryBoxHeight + 0.8); // Double finish line
-
-  // Left & Right boundary lines
-  doc.line(10, summaryY, 10, summaryY + summaryBoxHeight);
-  doc.line(200, summaryY, 200, summaryY + summaryBoxHeight);
-
-  // Summary Metrics Text
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
-
-  const textY = summaryY + 8.5;
-  doc.text(`Total Records: ${transactions.length}`, 16, textY);
-  
-  doc.setTextColor(16, 185, 129);
-  doc.text(`Total Deposit (+): Tk. ${formatCurrency(totalDeposit)}`, 75, textY);
-
-  doc.setTextColor(225, 29, 72);
-  doc.text(`Total Send (-): Tk. ${formatCurrency(totalSend)}`, 140, textY);
-
-  // 7. Statement Sign-off / Balance Verification Note below finish line
-  const signOffY = summaryY + summaryBoxHeight + 8;
-  if (signOffY < doc.internal.pageSize.getHeight() - 20) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(
-      `Closing Balance: Tk. ${formatCurrency(user.balance || 0)}  |  Total Outflows (Debits): Tk. ${formatCurrency(totalSend + totalCharges)}  |  Total Inflows (Credits): Tk. ${formatCurrency(totalDeposit)}`,
-      10,
-      signOffY
-    );
-  }
 
   // Save the PDF File
   const safeFileName = `Statement_${user.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`;
