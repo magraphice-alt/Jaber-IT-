@@ -8,7 +8,8 @@ import {
   sendHomeScreenNotification,
   playNotificationSound,
   playSuccessChime,
-  triggerQuickHaptic
+  triggerQuickHaptic,
+  updateAppBadge
 } from '../utils/notificationSound';
 
 export interface OperationAlertState {
@@ -293,6 +294,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
   }, [users, currentUser]);
+
+  // Update App Badge on Mobile Home Screen Icon & Browser Tab
+  useEffect(() => {
+    if (!currentUser) {
+      updateAppBadge(0);
+      return;
+    }
+    const unreadCount = notifications.filter(n => {
+      if (currentUser.role === 'admin') {
+        return !n.read && (n.userId === 'admin' || n.userId === 'all');
+      }
+      return !n.read && (n.userId === currentUser.id || n.userId === 'all');
+    }).length;
+
+    updateAppBadge(unreadCount);
+  }, [notifications, currentUser]);
 
   const login = (email: string, pass: string): { success: boolean; message?: string } => {
     const cleanEmail = email.trim().toLowerCase();

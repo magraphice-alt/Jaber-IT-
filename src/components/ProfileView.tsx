@@ -119,11 +119,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onBack }) => {
         return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setSelectedAvatar(reader.result);
-          setAvatarMsg({ type: 'success', text: isBn ? 'ছবি নির্বাচন করা হয়েছে। Save করুন।' : 'Image selected! Click Save to apply.' });
-        }
+      reader.onload = (readerEvt) => {
+        const img = new window.Image();
+        img.onload = () => {
+          // Compress using canvas to a 250x250 square
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const size = Math.min(img.width, img.height);
+          const startX = (img.width - size) / 2;
+          const startY = (img.height - size) / 2;
+          canvas.width = 250;
+          canvas.height = 250;
+          if (ctx) {
+            ctx.drawImage(img, startX, startY, size, size, 0, 0, 250, 250);
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            setSelectedAvatar(compressedDataUrl);
+            setAvatarMsg({ type: 'success', text: isBn ? 'ছবি নির্বাচন করা হয়েছে। Save করুন।' : 'Image selected! Click Save to apply.' });
+          }
+        };
+        img.src = readerEvt.target?.result as string;
       };
       reader.readAsDataURL(file);
     }

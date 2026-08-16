@@ -182,6 +182,99 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 /**
+ * Dynamic App Badging & Favicon updates for Mobile Home Screen & Browser
+ * Sets the red numeric badge on installed mobile shortcut icon (App Badging API)
+ * as well as browser tab favicon and document title.
+ */
+export function updateAppBadge(count: number): void {
+  const safeCount = Math.max(0, Math.floor(count || 0));
+
+  if (typeof navigator !== 'undefined') {
+    // 1. Standard App Badging API for Mobile PWAs and Desktop shortcuts
+    const nav = navigator as unknown as {
+      setAppBadge?: (count?: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+
+    if (typeof nav.setAppBadge === 'function') {
+      if (safeCount > 0) {
+        nav.setAppBadge(safeCount).catch(() => {});
+      } else if (typeof nav.clearAppBadge === 'function') {
+        nav.clearAppBadge().catch(() => {});
+      }
+    }
+
+    // 2. Notify Service Worker if active to sync badge
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'UPDATE_BADGE_COUNT',
+        count: safeCount
+      });
+    }
+  }
+
+  // 3. Update dynamic favicon badge and tab title
+  updateFaviconAndTitleBadge(safeCount);
+}
+
+export function updateFaviconAndTitleBadge(count: number): void {
+  if (typeof document === 'undefined') return;
+
+  const baseTitle = 'Masud Telecom';
+  if (count > 0) {
+    document.title = `(${count}) ${baseTitle}`;
+  } else {
+    document.title = baseTitle;
+  }
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      ctx.clearRect(0, 0, 32, 32);
+      ctx.drawImage(img, 0, 0, 32, 32);
+
+      if (count > 0) {
+        const text = count > 99 ? '99+' : count.toString();
+        const badgeRadius = text.length > 2 ? 10 : 8;
+        const cx = 32 - badgeRadius - 1;
+        const cy = badgeRadius + 1;
+
+        // Red badge circle with white border
+        ctx.beginPath();
+        ctx.arc(cx, cy, badgeRadius, 0, 2 * Math.PI);
+        ctx.fillStyle = '#dc2626'; // Vivid red
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        // White badge text
+        ctx.fillStyle = '#ffffff';
+        ctx.font = text.length > 2 ? 'bold 7px sans-serif' : 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, cx, cy + 0.5);
+      }
+
+      const faviconLink = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
+      if (faviconLink) {
+        faviconLink.href = canvas.toDataURL('image/png');
+      }
+    };
+    img.src = '/favicon-32.png';
+  } catch (err) {
+    console.warn('Favicon badge update error:', err);
+  }
+}
+
+/**
  * Formats notification title cleanly to avoid spam detection by mobile OS
  */
 function cleanNotificationTitle(title: string): string {
@@ -197,7 +290,8 @@ function cleanNotificationTitle(title: string): string {
  */
 export async function sendHomeScreenNotification(
   title: string = 'Masud Telecom: Account Notification',
-  body: string = 'Activity updated in your Masud Telecom account.'
+  body: string = 'Activity updated in your Masud Telecom account.',
+  badgeCount?: number
 ): Promise<void> {
   if (isAppClosing) return;
   const cleanTitle = cleanNotificationTitle(title);
@@ -208,7 +302,12 @@ export async function sendHomeScreenNotification(
   // 2. Trigger 3+ seconds vibration
   triggerVibration(3400);
 
-  // 3. Dispatch system notification to mobile notification status bar
+  // 3. Update App Badge counter on mobile icon
+  if (typeof badgeCount === 'number') {
+    updateAppBadge(badgeCount);
+  }
+
+  // 4. Dispatch system notification to mobile notification status bar
   try {
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -217,14 +316,14 @@ export async function sendHomeScreenNotification(
           await reg.showNotification(cleanTitle, {
             body,
             icon: '/icon-192.png',
-            badge: '/icon-192.png',
+            badge: '/badge-icon.png',
             vibrate: [600, 150, 600, 150, 600, 150, 600],
             silent: false,
             timestamp: Date.now(),
             tag: `masud-txn-${Date.now()}`,
             renotify: true,
             requireInteraction: false,
-            data: { url: '/?tab=send', timestamp: Date.now() }
+            data: { url: '/?tab=send', timestamp: Date.now(), badgeCount }
           } as unknown as NotificationOptions);
           return;
         } else if (reg.active) {
@@ -232,6 +331,7 @@ export async function sendHomeScreenNotification(
             type: 'SHOW_HOME_SCREEN_NOTIFICATION',
             title: cleanTitle,
             body,
+            badgeCount,
             url: '/?tab=send'
           });
           return;
