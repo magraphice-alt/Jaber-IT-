@@ -15,7 +15,8 @@ import {
   Users,
   ExternalLink,
   Copy,
-  Check
+  Check,
+  Wallet
 } from 'lucide-react';
 import { TransferMethod } from '../types';
 import { amountToWords } from '../utils/numberToWords';
@@ -176,25 +177,51 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 max-w-md mx-auto shadow-xl">
       {/* Top Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-3">
+      <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-2xs">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
             onClick={onBack}
-            className="p-1 rounded-full hover:bg-slate-100 text-slate-700 transition-colors"
+            className="p-1 rounded-full hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer shrink-0"
+            title="Back"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
-          <h1 className="text-xl font-bold text-blue-950">Send Money</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-blue-950 truncate">Send Money</h1>
         </div>
-        <button
-          onClick={onOpenNotifications}
-          className="relative p-2 rounded-full hover:bg-slate-100 transition-colors"
-        >
-          <Bell className="w-6 h-6 text-slate-700" />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white" />
-          )}
-        </button>
+
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* User Available Balance Display on Right Side */}
+          <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-xl px-2.5 py-1 text-right flex items-center gap-2 shadow-2xs">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 hidden xs:flex items-center justify-center shrink-0">
+              <Wallet className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col text-right">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider leading-none">
+                Available Balance
+              </span>
+              <span
+                className={`text-xs sm:text-sm font-black font-mono leading-tight mt-0.5 ${
+                  currentUser && currentUser.balance < 0 ? 'text-rose-600' : 'text-emerald-700'
+                }`}
+              >
+                {currentUser && currentUser.balance < 0
+                  ? `-৳${Math.abs(currentUser.balance).toLocaleString('en-BD', { minimumFractionDigits: 2 })}`
+                  : `৳${(currentUser?.balance || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}`}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={onOpenNotifications}
+            className="relative p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            title="Notifications"
+          >
+            <Bell className="w-5 h-5 sm:w-6 sm:h-6 text-slate-700" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Main Content Form Card */}
@@ -406,9 +433,17 @@ export const SendMoneyView: React.FC<SendMoneyViewProps> = ({ onBack, onOpenNoti
 
             {/* AMOUNT (BDT) */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                Amount (BDT)
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Amount (BDT)
+                </label>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Available:{' '}
+                  <strong className={`font-mono font-bold ${currentUser && currentUser.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    ৳{(currentUser?.balance || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}
+                  </strong>
+                </span>
+              </div>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-base">
                   ৳
