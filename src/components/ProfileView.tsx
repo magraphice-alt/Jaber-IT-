@@ -579,6 +579,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onBack }) => {
           <span>{t.logout}</span>
         </button>
 
+        {/* Footer Copyright */}
+        <div className="text-center pt-2 pb-6 text-xs text-slate-400 space-y-1">
+          <div>&copy; {new Date().getFullYear()} Masud Telecom &bull; All Rights Reserved</div>
+          <div className="text-red-500 font-bold text-xs tracking-wider">
+            Jaber IT Center, Paris, France
+          </div>
+        </div>
+
       </div>
 
       {/* ================= MODALS ================= */}

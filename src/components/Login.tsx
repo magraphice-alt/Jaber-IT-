@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Eye, EyeOff, ShieldCheck, UserCheck, Lock, Mail, Phone, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Phone } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login } = useApp();
@@ -29,18 +29,6 @@ export const Login: React.FC = () => {
     }, 400);
   };
 
-  const fillAdmin = () => {
-    setEmail('jabir.ahmed10@gmail.com');
-    setPassword('Jaber@01780');
-    setError(null);
-  };
-
-  const fillUser = () => {
-    setEmail('jabir0753704086@gmail.com');
-    setPassword('Masud@1780');
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden">
       {/* Background Decorative Blur */}
@@ -59,41 +47,6 @@ export const Login: React.FC = () => {
           <p className="text-slate-400 text-sm mt-1">
             Financial Transaction & Employee Commission Portal
           </p>
-        </div>
-
-        {/* Quick Credentials Switcher */}
-        <div className="mb-6 bg-slate-900/80 border border-slate-700/60 rounded-xl p-3">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2 font-medium">
-            <span className="flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Demo Quick Login:
-            </span>
-            <span className="text-slate-500">Tap to auto-fill</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={fillAdmin}
-              className="flex items-center justify-center gap-2 py-2 px-3 bg-blue-950/80 hover:bg-blue-900/80 border border-blue-700/50 rounded-lg text-xs text-blue-200 font-semibold transition-all text-left"
-            >
-              <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
-              <div>
-                <div className="leading-tight">Admin Demo</div>
-                <div className="text-[10px] opacity-75 font-mono">jabir.ahmed10</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={fillUser}
-              className="flex items-center justify-center gap-2 py-2 px-3 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-700/50 rounded-lg text-xs text-emerald-200 font-semibold transition-all text-left"
-            >
-              <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div>
-                <div className="leading-tight">User Demo</div>
-                <div className="text-[10px] opacity-75 font-mono">jabir0753704086</div>
-              </div>
-            </button>
-          </div>
         </div>
 
         {/* Error Alert */}
@@ -160,8 +113,11 @@ export const Login: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-700/60 text-center text-xs text-slate-400">
-          Internal Secure Payment Gateway &bull; Masud Telecom
+        <div className="mt-6 pt-4 border-t border-slate-700/60 text-center text-xs text-slate-400 space-y-1.5">
+          <div>&copy; {new Date().getFullYear()} Masud Telecom &bull; All Rights Reserved</div>
+          <div className="text-red-500 font-bold text-xs tracking-wider">
+            Jaber IT Center, Paris, France
+          </div>
         </div>
       </div>
     </div>
