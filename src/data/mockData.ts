@@ -198,7 +198,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
 
 // Password lookup dictionary for authentication
 export const PASSWORD_STORE: Record<string, string> = {
-  'jabir.ahmed10@gmail.com': 'Jaber@01780',
+  'jabir.ahmed10@gmail.com': 'Masud@1780',
   'jabir0753704086@gmail.com': 'Masud@1780',
   'rafiq@masudtelecom.com': 'Rafiq@123',
   'tania@masudtelecom.com': 'Tania@123'

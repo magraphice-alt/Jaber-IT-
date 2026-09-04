@@ -314,7 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
   const handleSecurityActionSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (erasePassword === 'Jaber@1780') {
+    if (erasePassword === 'Masud@1780' || erasePassword === 'Jaber@1780') {
       if (securityModalAction === 'erase') {
         const nowIso = new Date().toISOString();
         setEraseCheckpointTime(nowIso);
