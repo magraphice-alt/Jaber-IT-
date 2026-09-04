@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, getFirestore } from 'firebase/firestore';
+import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -21,6 +22,23 @@ export const db = (() => {
       : getFirestore(app);
   }
 })();
+
+let messagingInstance: Messaging | null = null;
+
+export async function getFirebaseMessaging(): Promise<Messaging | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const supported = await isSupported();
+    if (!supported) return null;
+    if (!messagingInstance) {
+      messagingInstance = getMessaging(app);
+    }
+    return messagingInstance;
+  } catch (err) {
+    console.warn('Firebase Messaging not supported in this browser context:', err);
+    return null;
+  }
+}
 
 export default app;
 

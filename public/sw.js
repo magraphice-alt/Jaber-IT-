@@ -33,10 +33,14 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const rawTitle = data.title || 'Account Notification';
+  const notifObj = data.notification || {};
+  const dataObj = data.data || {};
+
+  const rawTitle = notifObj.title || dataObj.title || data.title || 'Account Notification';
   const title = rawTitle.startsWith('Masud Telecom') ? rawTitle : `Masud Telecom: ${rawTitle.replace(/^[^\w\s]+/, '').trim()}`;
-  const body = data.body || data.message || 'New activity in your Masud Telecom account.';
-  const count = typeof data.badgeCount === 'number' ? data.badgeCount : 1;
+  const body = notifObj.body || dataObj.body || dataObj.message || data.body || data.message || 'New activity in your Masud Telecom account.';
+  const count = typeof dataObj.badgeCount === 'number' ? dataObj.badgeCount : (typeof data.badgeCount === 'number' ? data.badgeCount : 1);
+  const targetUrl = dataObj.url || data.url || '/?tab=send';
 
   if ('setAppBadge' in self.navigator && count > 0) {
     self.navigator.setAppBadge(count).catch(() => {});
@@ -50,10 +54,12 @@ self.addEventListener('push', (event) => {
     silent: false,
     renotify: true,
     timestamp: Date.now(),
-    tag: `masud-push-${Date.now()}`,
-    requireInteraction: true,
+    tag: dataObj.notificationId || `masud-push-${Date.now()}`,
+    requireInteraction: false,
     data: {
-      url: data.url || '/?tab=send',
+      url: targetUrl,
+      notificationId: dataObj.notificationId || '',
+      type: dataObj.type || '',
       dateOfArrival: Date.now()
     },
     actions: [

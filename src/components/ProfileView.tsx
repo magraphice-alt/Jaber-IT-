@@ -29,6 +29,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { getWhatsAppGroupUrl, getWhatsAppNumberUrl } from '../utils/whatsappHelper';
+import { NotificationSettingsModal } from './NotificationSettingsModal';
 
 interface ProfileViewProps {
   onBack: () => void;
@@ -765,92 +766,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onBack }) => {
       )}
 
       {/* 3. NOTIFICATION PREFERENCES MODAL */}
-      {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-amber-600" />
-                <h3 className="font-bold text-base text-slate-900">{t.notificationPrefs}</h3>
-              </div>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {notifSavedMsg && (
-              <div className="p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Notification preferences saved!</span>
-              </div>
-            )}
-
-            <div className="space-y-3 divide-y divide-slate-100">
-              <div className="flex items-center justify-between pt-1">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">SMS Notifications</span>
-                  <span className="text-[10px] text-slate-500">Receive instant SMS on balance changes</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={notifSettings.smsAlerts}
-                  onChange={() => toggleNotif('smsAlerts')}
-                  className="w-5 h-5 rounded text-blue-900 focus:ring-blue-500 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">Transaction Push Alerts</span>
-                  <span className="text-[10px] text-slate-500">In-app notifications for transfers</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={notifSettings.transactionAlerts}
-                  onChange={() => toggleNotif('transactionAlerts')}
-                  className="w-5 h-5 rounded text-blue-900 focus:ring-blue-500 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">Security Alerts</span>
-                  <span className="text-[10px] text-slate-500">Notify on login or password change</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={notifSettings.securityAlerts}
-                  onChange={() => toggleNotif('securityAlerts')}
-                  className="w-5 h-5 rounded text-blue-900 focus:ring-blue-500 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 block">Admin Announcements</span>
-                  <span className="text-[10px] text-slate-500">System updates & rate changes</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={notifSettings.adminNews}
-                  onChange={() => toggleNotif('adminNews')}
-                  className="w-5 h-5 rounded text-blue-900 focus:ring-blue-500 cursor-pointer"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={() => setActiveModal(null)}
-              className="w-full mt-2 bg-slate-900 text-white font-bold py-2.5 rounded-xl text-xs cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <NotificationSettingsModal
+        isOpen={activeModal === 'notifications'}
+        onClose={() => setActiveModal(null)}
+      />
 
       {/* 4. HELP CENTER MODAL */}
       {activeModal === 'help' && (

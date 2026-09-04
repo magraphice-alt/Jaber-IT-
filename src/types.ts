@@ -48,6 +48,26 @@ export interface Transaction {
   resentAt?: string;
 }
 
+export type NotificationType =
+  | 'welcome'
+  | 'new_user'
+  | 'deposit_submitted'
+  | 'deposit_approved'
+  | 'deposit_rejected'
+  | 'money_sent'
+  | 'money_received'
+  | 'withdrawal_submitted'
+  | 'withdrawal_approved'
+  | 'withdrawal_rejected'
+  | 'support_message'
+  | 'security_alert'
+  | 'system_announcement'
+  | 'test'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'alert';
+
 export interface NotificationItem {
   id: string;
   userId: string; // 'all', 'admin', or specific user ID
@@ -55,8 +75,39 @@ export interface NotificationItem {
   message: string;
   timestamp: string;
   read: boolean;
-  type: 'info' | 'success' | 'warning' | 'alert';
+  type: NotificationType;
   txnId?: string;
+  url?: string;
+  referenceId?: string;
+  eventId?: string;
+}
+
+export interface UserDevice {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  token: string;
+  deviceType: 'android' | 'windows' | 'macos' | 'ios' | 'desktop' | 'mobile';
+  browser: string;
+  platform: string;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string;
+  isActive: boolean;
+}
+
+export interface NotificationPreferences {
+  accountAlerts: boolean;
+  depositAlerts: boolean;
+  transferAlerts: boolean;
+  securityAlerts: boolean;
+  announcements: boolean;
+  browserPush: boolean;
+  soundEnabled: boolean;
+  soundStyle?: 'default' | 'crisp' | 'cash';
+  volume?: 'high' | 'medium' | 'low';
+  vibrationEnabled?: boolean;
 }
 
 export interface ResendDraftData {

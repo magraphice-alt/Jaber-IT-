@@ -43,6 +43,7 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Camera,
+  Megaphone,
   UploadCloud,
   Share2,
   Image as ImageIcon
@@ -56,12 +57,13 @@ import { amountToWords } from '../utils/numberToWords';
 import { cleanWhatsAppNumber, getWhatsAppNumberUrl, getWhatsAppGroupUrl, formatApprovalMessage, triggerWhatsAppAutoSend, copyToClipboardSafe } from '../utils/whatsappHelper';
 import { WhatsAppNoticeModal } from './WhatsAppNoticeModal';
 import { isBDToday, formatBDDateTime, getLiveBDClock, matchesBDDateFilter } from '../utils/timeHelper';
+import { AdminBroadcastSection } from './AdminBroadcastSection';
 
 interface AdminDashboardProps {
   onOpenNotifications: () => void;
 }
 
-export type AdminTab = 'dashboard' | 'users' | 'create' | 'help' | 'profile';
+export type AdminTab = 'dashboard' | 'users' | 'create' | 'help' | 'profile' | 'broadcast';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotifications }) => {
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
@@ -501,10 +503,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
           <Users className="w-3.5 h-3.5 text-blue-400" />
           <span>User Directory ({users.length})</span>
         </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('broadcast');
+            setSelectedUserId(null);
+          }}
+          className={`flex-1 py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+            activeTab === 'broadcast'
+              ? 'bg-blue-900 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Megaphone className="w-3.5 h-3.5 text-blue-400" />
+          <span>Push Broadcast</span>
+        </button>
       </div>
 
       {/* VIEW CONTENT BY TAB */}
       <div className="flex-1 p-4 space-y-4">
+        {activeTab === 'broadcast' && <AdminBroadcastSection />}
+
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             {/* Bangladesh Standard Time (BST) & 6:00 AM Cycle Status Indicator */}
@@ -866,14 +885,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                         .map(t => (
                           <div
                             key={t.id}
-                            className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs"
+                            className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs gap-2"
                           >
-                            <div>
-                              <div className="font-bold text-slate-900">{t.userName}</div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 truncate">{t.userName}</div>
                               <div className="text-slate-500">Method: {t.method}</div>
                               <div className="text-[10px] text-slate-400">{formatBDDateTime(t.createdAt, false)}</div>
+                              {t.attachmentUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPreviewProof({
+                                      url: t.attachmentUrl!,
+                                      name: t.attachmentName || 'Receipt_Proof.pdf',
+                                      userName: t.userName,
+                                      amount: t.amount,
+                                      method: t.method,
+                                      date: t.createdAt
+                                    })
+                                  }
+                                  className="mt-1 text-[10px] font-bold text-blue-900 hover:text-blue-700 underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText className="w-3 h-3 text-blue-700" />
+                                  <span>View Proof ({t.attachmentName || 'Document'})</span>
+                                </button>
+                              )}
                             </div>
-                            <div className="text-right">
+                            <div className="text-right shrink-0">
                               <div className="font-extrabold text-emerald-700">+৳{t.amount.toLocaleString('en-BD')}</div>
                             </div>
                           </div>
@@ -2894,6 +2932,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
             </form>
           </div>
         </div>
+      )}
+
+      {/* Proof Document Preview Modal */}
+      {previewProof && (
+        <ProofPreviewModal
+          data={previewProof}
+          onClose={() => setPreviewProof(null)}
+        />
       )}
     </div>
   );

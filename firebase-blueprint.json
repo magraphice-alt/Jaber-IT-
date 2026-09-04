@@ -60,9 +60,50 @@
         "timestamp": { "type": "string" },
         "read": { "type": "boolean" },
         "type": { "type": "string" },
-        "txnId": { "type": "string" }
+        "txnId": { "type": "string" },
+        "url": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "eventId": { "type": "string" }
       },
       "required": ["id", "userId", "title", "message"]
+    },
+    "UserDevice": {
+      "title": "UserDevice",
+      "description": "Registered device tokens for mobile and desktop push notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "token": { "type": "string" },
+        "deviceType": { "type": "string" },
+        "browser": { "type": "string" },
+        "platform": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "lastUsedAt": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "token", "deviceType"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "/transactions/{txnId}": {
+      "schema": "Transaction",
+      "description": "Financial transactions"
+    },
+    "/notifications/{notifId}": {
+      "schema": "NotificationItem",
+      "description": "In-app and push notifications"
+    },
+    "/userDevices/{deviceId}": {
+      "schema": "UserDevice",
+      "description": "Device tokens for Android mobile and desktop PWA push notifications"
     }
   }
 }

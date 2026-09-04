@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter, RotateCcw, Lock } from 'lucide-react';
+import { Bell, Search, Calendar, Phone, ArrowUpRight, PlusCircle, CheckCircle, Clock, AlertCircle, FileText, MapPin, Download, Filter, RotateCcw, Lock, Eye } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { PendingSendWidget } from './PendingSendWidget';
 import { EditSendModal } from './EditSendModal';
+import { ProofPreviewModal, ProofModalData } from './ProofPreviewModal';
 import { Transaction } from '../types';
 import { generateStatementPDF } from '../utils/pdfGenerator';
 import { formatBDDateTime, matchesBDDateFilter } from '../utils/timeHelper';
@@ -16,6 +17,7 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
   const { transactions, currentUser, notifications, startResendTransaction } = useApp();
   const [selectedReceiptTxn, setSelectedReceiptTxn] = useState<Transaction | null>(null);
   const [selectedEditTxn, setSelectedEditTxn] = useState<Transaction | null>(null);
+  const [previewProof, setPreviewProof] = useState<ProofModalData | null>(null);
 
   const [visibleCount, setVisibleCount] = useState<number>(10);
 
@@ -404,18 +406,43 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
                         </div>
                       )}
 
-                      {/* Receipt Action Button */}
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setSelectedReceiptTxn(t);
-                        }}
-                        className="bg-blue-900 hover:bg-blue-800 text-white text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs shrink-0 ml-auto"
-                      >
-                        <FileText className="w-3 h-3 text-blue-300" />
-                        <span>Receipt</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        {/* Direct View Proof Button if attached */}
+                        {t.attachmentUrl && (
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setPreviewProof({
+                                url: t.attachmentUrl!,
+                                name: t.attachmentName || 'Deposit_Proof.pdf',
+                                userName: t.userName,
+                                amount: t.amount,
+                                method: t.method,
+                                date: t.createdAt
+                              });
+                            }}
+                            className="bg-emerald-700 hover:bg-emerald-600 text-white text-[9px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs"
+                            title="View Attached Proof Document"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-200" />
+                            <span>Proof</span>
+                          </button>
+                        )}
+
+                        {/* Receipt Action Button */}
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setSelectedReceiptTxn(t);
+                          }}
+                          className="bg-blue-900 hover:bg-blue-800 text-white text-[9px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-xs shrink-0"
+                        >
+                          <FileText className="w-3 h-3 text-blue-300" />
+                          <span>Receipt</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Pending Send Widget with 10-Min Timer Bar */}
@@ -498,6 +525,14 @@ export const StatementView: React.FC<StatementViewProps> = ({ onOpenNotification
         <EditSendModal
           transaction={selectedEditTxn}
           onClose={() => setSelectedEditTxn(null)}
+        />
+      )}
+
+      {/* Proof Preview Modal */}
+      {previewProof && (
+        <ProofPreviewModal
+          data={previewProof}
+          onClose={() => setPreviewProof(null)}
         />
       )}
     </div>

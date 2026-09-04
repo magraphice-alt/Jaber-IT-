@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { User, Transaction, NotificationItem, SystemSettings, TransferMethod, ResendDraftData } from '../types';
+import { User, Transaction, NotificationItem, NotificationType, SystemSettings, TransferMethod, ResendDraftData } from '../types';
 import { INITIAL_USERS, INITIAL_TRANSACTIONS, INITIAL_NOTIFICATIONS, INITIAL_SETTINGS, PASSWORD_STORE } from '../data/mockData';
 import { db } from '../lib/firebase';
 import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { amountToWords } from '../utils/numberToWords';
+import { formatBDDateTime } from '../utils/timeHelper';
+import { sendPushNotificationRequest } from '../services/fcmService';
 import {
   sendHomeScreenNotification,
   playNotificationSound,
@@ -54,6 +56,25 @@ interface AppContextType {
   markAllNotificationsRead: () => void;
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
+  dispatchNotification: (notif: {
+    userId: string;
+    title: string;
+    message: string;
+    type: NotificationType;
+    txnId?: string;
+    url?: string;
+    referenceId?: string;
+    eventId?: string;
+  }) => Promise<NotificationItem>;
+  sendAdminBroadcast: (params: {
+    title: string;
+    message: string;
+    target: 'all' | 'selected' | 'admins';
+    selectedUserIds?: string[];
+    type: NotificationType;
+    url?: string;
+  }) => Promise<{ success: boolean; count: number }>;
+  sendTestNotification: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1102,6 +1123,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     safeSaveLocal(LOCAL_STORAGE_KEY_NOTIFS, remaining);
   };
 
+  const dispatchNotification = async (notifData: {
+    userId: string;
+    title: string;
+    message: string;
+    type: NotificationType;
+    txnId?: string;
+    url?: string;
+    referenceId?: string;
+    eventId?: string;
+  }): Promise<NotificationItem> => {
+    const id = notifData.eventId || `notif-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const newNotif: NotificationItem = {
+      id,
+      userId: notifData.userId,
+      title: notifData.title,
+      message: notifData.message,
+      timestamp: formatBDDateTime(new Date()),
+      read: false,
+      type: notifData.type,
+      txnId: notifData.txnId,
+      url: notifData.url || '/?tab=send',
+      referenceId: notifData.referenceId || notifData.txnId,
+      eventId: notifData.eventId
+    };
+
+    setNotifications(prev => {
+      if (prev.some(n => n.id === id || (notifData.eventId && n.eventId === notifData.eventId))) {
+        return prev;
+      }
+      return [newNotif, ...prev];
+    });
+    notifiedIdsRef.current.add(id);
+
+    setDoc(doc(db, 'notifications', id), cleanForFirestore(newNotif)).catch(err => {
+      console.warn('Firestore notification write error:', err);
+    });
+
+    const activeUser = currentUserRef.current;
+    if (activeUser && (notifData.userId === activeUser.id || notifData.userId === 'all' || (activeUser.role === 'admin' && notifData.userId === 'admin'))) {
+      sendHomeScreenNotification(notifData.title, notifData.message);
+    }
+
+    sendPushNotificationRequest({
+      userId: notifData.userId,
+      title: notifData.title,
+      message: notifData.message,
+      type: notifData.type,
+      url: notifData.url,
+      referenceId: notifData.referenceId || notifData.txnId
+    }).catch(() => {});
+
+    return newNotif;
+  };
+
+  const sendAdminBroadcast = async (params: {
+    title: string;
+    message: string;
+    target: 'all' | 'selected' | 'admins';
+    selectedUserIds?: string[];
+    type: NotificationType;
+    url?: string;
+  }): Promise<{ success: boolean; count: number }> => {
+    let count = 0;
+    const url = params.url || '/?tab=send';
+
+    if (params.target === 'all') {
+      await dispatchNotification({
+        userId: 'all',
+        title: params.title,
+        message: params.message,
+        type: params.type || 'system_announcement',
+        url
+      });
+      count = users.length;
+    } else if (params.target === 'admins') {
+      await dispatchNotification({
+        userId: 'admin',
+        title: params.title,
+        message: params.message,
+        type: params.type || 'system_announcement',
+        url
+      });
+      count = users.filter(u => u.role === 'admin').length;
+    } else if (params.target === 'selected' && params.selectedUserIds && params.selectedUserIds.length > 0) {
+      for (const targetId of params.selectedUserIds) {
+        await dispatchNotification({
+          userId: targetId,
+          title: params.title,
+          message: params.message,
+          type: params.type || 'system_announcement',
+          url
+        });
+        count++;
+      }
+    }
+
+    triggerOperationSuccess('Broadcast sent!', `Sent to ${count} recipient(s).`);
+    return { success: true, count };
+  };
+
+  const sendTestNotification = async (): Promise<boolean> => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) return false;
+
+    await dispatchNotification({
+      userId: activeUser.id,
+      title: '🔔 Test Notification',
+      message: 'Your notification system is working correctly across mobile and desktop.',
+      type: 'test',
+      url: '/?tab=send'
+    });
+
+    triggerOperationSuccess('Test Alert Dispatched', 'Notification received and audio/vibration triggered.');
+    return true;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1137,7 +1275,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNotificationRead,
         markAllNotificationsRead,
         deleteNotification,
-        clearNotifications
+        clearNotifications,
+        dispatchNotification,
+        sendAdminBroadcast,
+        sendTestNotification
       }}
     >
       {children}

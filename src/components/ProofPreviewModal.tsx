@@ -63,17 +63,19 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
     const checkImage =
       !checkPdf &&
       (url.startsWith('data:image/') ||
+        url.startsWith('data:') ||
         name.endsWith('.jpg') ||
         name.endsWith('.jpeg') ||
         name.endsWith('.png') ||
         name.endsWith('.webp') ||
         name.endsWith('.gif') ||
-        /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(url));
+        /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(url) ||
+        !name.includes('.'));
 
     return { isPdf: checkPdf, isImage: checkImage, normalizedUrl: url };
   }, [data]);
 
-  // Create a reliable Blob URL for viewing and downloading
+  // Create a reliable Blob URL for viewing and downloading (especially for PDFs)
   useEffect(() => {
     setHasError(false);
     setZoom(1);
@@ -84,16 +86,12 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
       return;
     }
 
-    if (normalizedUrl.startsWith('data:')) {
+    let createdObjectUrl: string | null = null;
+
+    if (normalizedUrl.startsWith('data:application/pdf') || isPdf) {
       try {
         const parts = normalizedUrl.split(',');
         if (parts.length === 2) {
-          const mimeMatch = parts[0].match(/:(.*?);/);
-          const mime = mimeMatch
-            ? mimeMatch[1]
-            : isPdf
-            ? 'application/pdf'
-            : 'image/jpeg';
           const byteCharacters = atob(parts[1]);
           const byteArrays: Uint8Array[] = [];
           const sliceSize = 1024;
@@ -107,20 +105,28 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
             byteArrays.push(new Uint8Array(byteNumbers));
           }
 
-          const blob = new Blob(byteArrays as BlobPart[], { type: mime });
-          const url = URL.createObjectURL(blob);
-          setBlobUrl(url);
-
-          return () => {
-            URL.revokeObjectURL(url);
-          };
+          const blob = new Blob(byteArrays as BlobPart[], { type: 'application/pdf' });
+          createdObjectUrl = URL.createObjectURL(blob);
+          setBlobUrl(createdObjectUrl);
+        } else {
+          setBlobUrl(normalizedUrl);
         }
       } catch (err) {
         console.error('Failed to convert base64 to blob:', err);
+        setBlobUrl(normalizedUrl);
       }
+    } else {
+      // For images and general files, use normalizedUrl directly
+      setBlobUrl(normalizedUrl);
     }
 
-    setBlobUrl(normalizedUrl);
+    return () => {
+      if (createdObjectUrl) {
+        try {
+          URL.revokeObjectURL(createdObjectUrl);
+        } catch {}
+      }
+    };
   }, [normalizedUrl, isPdf]);
 
   if (!data) return null;
@@ -128,14 +134,14 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
   const fileName = data.name || (isPdf ? 'statement_proof.pdf' : 'attachment_proof.jpg');
 
   const handleOpenInNewTab = () => {
-    const targetUrl = blobUrl || normalizedUrl;
+    const targetUrl = blobUrl || normalizedUrl || data.url;
     if (targetUrl) {
       window.open(targetUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
   const handleDownload = () => {
-    const targetUrl = blobUrl || normalizedUrl;
+    const targetUrl = blobUrl || normalizedUrl || data.url;
     if (!targetUrl) return;
 
     try {
@@ -153,7 +159,7 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
@@ -376,7 +382,7 @@ export const ProofPreviewModal: React.FC<ProofPreviewModalProps> = ({ data, onCl
             /* Image Receipt Viewer */
             <div className="relative w-full h-full flex items-center justify-center overflow-auto">
               <img
-                src={blobUrl || normalizedUrl}
+                src={normalizedUrl || blobUrl || data.url}
                 alt={fileName}
                 style={{
                   transform: `scale(${zoom}) rotate(${rotation}deg)`,
