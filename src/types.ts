@@ -17,6 +17,7 @@ export interface User {
   totalCommission: number;
   createdAt: string;
   status?: 'active' | 'suspended';
+  password?: string;
 }
 
 export type TransactionType = 'send' | 'deposit' | 'charge';

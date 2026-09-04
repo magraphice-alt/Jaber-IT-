@@ -243,10 +243,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!snapshot.empty) {
           const fsUsers: User[] = snapshot.docs.map(docSnap => docSnap.data() as User);
           setUsers(fsUsers);
+          // Sync passwords from Firestore user records into active password store
+          setPasswords(prev => {
+            const updated = { ...prev };
+            let changed = false;
+            fsUsers.forEach(u => {
+              const uEmail = u.email?.toLowerCase().trim();
+              if (uEmail && u.password && updated[uEmail] !== u.password) {
+                updated[uEmail] = u.password;
+                changed = true;
+              }
+            });
+            if (changed) {
+              safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, updated);
+            }
+            return updated;
+          });
         } else {
           // Seed initial users into Firestore
           INITIAL_USERS.forEach(u => {
-            setDoc(doc(db, 'users', u.id), cleanForFirestore(u)).catch(() => {});
+            const userWithPass = {
+              ...u,
+              password: PASSWORD_STORE[u.email.toLowerCase()] || 'Masud@1780'
+            };
+            setDoc(doc(db, 'users', u.id), cleanForFirestore(userWithPass)).catch(() => {});
           });
         }
       }, err => {
@@ -385,16 +405,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateAppBadge(unreadCount);
   }, [notifications, currentUser]);
 
-  const login = (email: string, pass: string): { success: boolean; message?: string } => {
-    const cleanEmail = email.trim().toLowerCase();
-    const isMainAdmin = cleanEmail === 'jabir.ahmed10@gmail.com';
-    let targetUser = users.find(u => u.email.toLowerCase() === cleanEmail);
+  const login = (emailOrId: string, pass: string): { success: boolean; message?: string } => {
+    const cleanInput = emailOrId.trim().toLowerCase();
+    const isMainAdmin = cleanInput === 'jabir.ahmed10@gmail.com';
+    let targetUser = users.find(u => u.email.toLowerCase() === cleanInput || u.id.toLowerCase() === cleanInput);
 
     if (!targetUser) {
       if (isMainAdmin) {
         targetUser = { ...DEFAULT_ADMIN };
       } else {
-        return { success: false, message: 'Account not found with this email.' };
+        return { success: false, message: 'Account not found with this email or User ID.' };
       }
     }
 
@@ -402,15 +422,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       targetUser = { ...targetUser, role: 'admin' };
     }
 
-    const storedPass = passwords[cleanEmail] || PASSWORD_STORE[cleanEmail] || '123456';
-    const isValidPass = storedPass === pass.trim() || (isMainAdmin && pass.trim() === 'Masud@1780');
+    const emailKey = targetUser.email.toLowerCase();
+    const storedPass = passwords[emailKey] || PASSWORD_STORE[emailKey] || targetUser.password || '123456';
+    const isValidPass =
+      storedPass === pass.trim() ||
+      (isMainAdmin && pass.trim() === 'Masud@1780') ||
+      Boolean(targetUser.password && targetUser.password === pass.trim());
 
     if (!isValidPass) {
       return { success: false, message: 'Invalid password. Please try again.' };
     }
 
-    if (targetUser.status === 'blocked') {
+    if (targetUser.status === 'suspended') {
       return { success: false, message: 'Your account is currently suspended. Please contact Admin.' };
+    }
+
+    // Ensure active password is auto cached in local storage for instant future access
+    if (!passwords[emailKey] || passwords[emailKey] !== pass.trim()) {
+      const updated = { ...passwords, [emailKey]: pass.trim() };
+      setPasswords(updated);
+      safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, updated);
     }
 
     setCurrentUser(targetUser);
@@ -1030,15 +1061,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const emailKey = userData.email.trim().toLowerCase();
-    if (users.some(u => u.email.toLowerCase() === emailKey)) {
-      return { success: false, message: 'An account with this email already exists.' };
+    if (users.some(u => u.email.toLowerCase() === emailKey || u.id.toLowerCase() === emailKey)) {
+      return { success: false, message: 'An account with this email or User ID already exists.' };
     }
 
+    const effectivePassword = passwordStr && passwordStr.trim().length > 0 ? passwordStr.trim() : 'Masud@1780';
+
+    // User email id IS the user id as requested
     const newUser: User = {
-      id: `USR-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: userData.name,
+      id: emailKey, // Email ID is the User ID
+      name: userData.name.trim(),
       email: emailKey,
-      mobile: userData.mobile || '+880 1700 000000',
+      mobile: userData.mobile?.trim() || '+880 1700 000000',
       role: userData.role || 'user',
       balance: userData.balance || 0,
       commissionRate: userData.commissionRate || settings.defaultCommissionRate,
@@ -1046,16 +1080,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       totalSend: 0,
       totalCommission: 0,
       createdAt: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
+      password: effectivePassword
     };
 
     setUsers(prev => [...prev, newUser]);
-    setPasswords(prev => ({ ...prev, [emailKey]: passwordStr || 'Masud@123' }));
-    setDoc(doc(db, 'users', newUser.id), newUser).catch(() => {});
+
+    // Auto-active password prepared for login user
+    const updatedPasswords = { ...passwords, [emailKey]: effectivePassword };
+    setPasswords(updatedPasswords);
+    safeSaveLocal(LOCAL_STORAGE_KEY_PASSWORDS, updatedPasswords);
+
+    // Persist user with cleanForFirestore
+    setDoc(doc(db, 'users', newUser.id), cleanForFirestore(newUser)).catch(() => {});
 
     triggerOperationSuccess('Your operation successful!', `User ${newUser.name} created.`);
 
-    return { success: true };
+    return {
+      success: true,
+      message: `Account created successfully! User ID: ${newUser.id} | Password: ${effectivePassword} (Active & ready for instant login).`
+    };
   };
 
   const deleteUserAccount = (userId: string) => {
