@@ -25,6 +25,7 @@ import {
   ImageDown,
   Loader2
 } from 'lucide-react';
+import { ProofPreviewModal } from './ProofPreviewModal';
 
 interface ReceiptModalProps {
   transaction: Transaction | null;
@@ -37,6 +38,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [photoSaved, setPhotoSaved] = useState(false);
+  const [showProofModal, setShowProofModal] = useState(false);
   const barcodeRef = useRef<SVGSVGElement | null>(null);
 
   // Resolve target user name & address for receipt header
@@ -480,6 +482,27 @@ Thank you - Masud Telecom
                   </div>
                 </div>
               )}
+
+              {/* Proof Attachment Badge & View Button */}
+              {transaction.attachmentUrl && (
+                <div className="pt-1 pb-1 no-print">
+                  <div className="bg-blue-50/70 rounded-lg p-2 border border-blue-200 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <FileText className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                      <span className="text-[9px] font-bold text-slate-800 truncate">
+                        {transaction.attachmentName || 'Proof Document'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowProofModal(true)}
+                      className="text-[9px] font-extrabold text-blue-900 bg-white hover:bg-blue-100 border border-blue-300 px-2.5 py-1 rounded-md cursor-pointer transition-colors shadow-2xs shrink-0"
+                    >
+                      View Proof
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Thank you note */}
@@ -621,6 +644,21 @@ Thank you - Masud Telecom
           </div>
         </div>
       </div>
+
+      {/* Proof Document Preview Modal */}
+      {showProofModal && transaction.attachmentUrl && (
+        <ProofPreviewModal
+          data={{
+            url: transaction.attachmentUrl,
+            name: transaction.attachmentName,
+            userName: receiptUserName,
+            amount: transaction.amount,
+            method: transaction.method,
+            date: transaction.createdAt
+          }}
+          onClose={() => setShowProofModal(false)}
+        />
+      )}
     </div>
   );
 };

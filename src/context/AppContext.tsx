@@ -51,6 +51,7 @@ interface AppContextType {
   updateSystemSettings: (newSettings: Partial<SystemSettings>) => void;
   changeUserPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
   markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
 }
@@ -1048,6 +1049,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const markAllNotificationsRead = () => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) return;
+    setNotifications(prev =>
+      prev.map(n => {
+        const isRelevant =
+          n.userId === activeUser.id ||
+          n.userId === 'all' ||
+          (activeUser.role === 'admin' && (n.userId === 'admin' || n.userId === 'all'));
+        if (isRelevant && !n.read) {
+          const updated = { ...n, read: true };
+          setDoc(doc(db, 'notifications', n.id), cleanForFirestore(updated)).catch(() => {});
+          return updated;
+        }
+        return n;
+      })
+    );
+  };
+
   const deleteNotification = (id: string) => {
     deleteDoc(doc(db, 'notifications', id)).catch(() => {});
     setNotifications(prev => {
@@ -1115,6 +1135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateSystemSettings,
         changeUserPassword,
         markNotificationRead,
+        markAllNotificationsRead,
         deleteNotification,
         clearNotifications
       }}

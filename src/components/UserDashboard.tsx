@@ -74,11 +74,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ onTabChange, onOpe
         </div>
         <button
           onClick={onOpenNotifications}
-          className="relative p-2 rounded-full hover:bg-slate-800 transition-colors"
+          className="relative p-2 rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
+          title={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         >
           <Bell className="w-6 h-6 text-slate-200" />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-black" />
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 border-2 border-black shadow-xs">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
           )}
         </button>
       </div>

@@ -50,6 +50,7 @@ import {
 import { TransferMethod, Transaction, User } from '../types';
 import { ReceiptModal } from './ReceiptModal';
 import { ChargeModal } from './ChargeModal';
+import { ProofPreviewModal, ProofModalData } from './ProofPreviewModal';
 import { generateStatementPDF } from '../utils/pdfGenerator';
 import { amountToWords } from '../utils/numberToWords';
 import { cleanWhatsAppNumber, getWhatsAppNumberUrl, getWhatsAppGroupUrl, formatApprovalMessage, triggerWhatsAppAutoSend, copyToClipboardSafe } from '../utils/whatsappHelper';
@@ -277,7 +278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
   };
 
   // Proof Modal
-  const [previewProofUrl, setPreviewProofUrl] = useState<string | null>(null);
+  const [previewProof, setPreviewProof] = useState<ProofModalData | null>(null);
 
   // New User Form State
   const [newUserName, setNewUserName] = useState('');
@@ -460,11 +461,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
         </div>
         <button
           onClick={onOpenNotifications}
-          className="relative p-2 rounded-full hover:bg-slate-800 transition-colors"
+          className="relative p-2 rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
+          title={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         >
           <Bell className="w-5 h-5 text-slate-200" />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-black" />
+            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 border-2 border-black shadow-xs">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
           )}
         </button>
       </div>
@@ -780,10 +784,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                           {t.attachmentUrl && (
                             <button
-                              onClick={() => setPreviewProofUrl(t.attachmentUrl!)}
-                              className="text-xs text-blue-800 font-bold underline flex items-center gap-1 bg-white p-1.5 rounded border border-slate-200"
+                              onClick={() =>
+                                setPreviewProof({
+                                  url: t.attachmentUrl!,
+                                  name: t.attachmentName || 'Receipt_Proof.pdf',
+                                  userName: t.userName,
+                                  amount: t.amount,
+                                  method: t.method,
+                                  date: t.createdAt
+                                })
+                              }
+                              className="text-xs text-blue-800 hover:text-blue-950 font-bold underline flex items-center gap-1.5 bg-blue-50/90 hover:bg-blue-100/90 px-2.5 py-1.5 rounded-lg border border-blue-200 cursor-pointer transition-colors shadow-2xs"
                             >
-                              <FileText className="w-3.5 h-3.5" /> View Proof Receipt ({t.attachmentName || 'Image'})
+                              <FileText className="w-3.5 h-3.5 text-blue-700" />
+                              <span>View Proof Receipt ({t.attachmentName || 'Document'})</span>
                             </button>
                           )}
 
@@ -1694,10 +1708,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
 
                               {t.attachmentUrl && (
                                 <button
-                                  onClick={() => setPreviewProofUrl(t.attachmentUrl || null)}
-                                  className="text-[10px] font-bold text-blue-900 hover:underline flex items-center gap-1"
+                                  onClick={() =>
+                                    setPreviewProof({
+                                      url: t.attachmentUrl!,
+                                      name: t.attachmentName || 'Receipt_Proof.pdf',
+                                      userName: t.userName,
+                                      amount: t.amount,
+                                      method: t.method,
+                                      date: t.createdAt
+                                    })
+                                  }
+                                  className="text-[10px] font-bold text-blue-900 hover:text-blue-700 underline flex items-center gap-1 cursor-pointer"
                                 >
-                                  <Eye className="w-3 h-3" /> View Proof
+                                  <Eye className="w-3 h-3 text-blue-700" />
+                                  <span>View Proof ({t.attachmentName || 'File'})</span>
                                 </button>
                               )}
                             </div>
@@ -2548,22 +2572,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
       )}
 
       {/* Proof Receipt Inspection Modal */}
-      {previewProofUrl && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-4 space-y-3 relative">
-            <button
-              onClick={() => setPreviewProofUrl(null)}
-              className="absolute top-3 right-3 p-1 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="font-bold text-sm text-slate-900">Attachment Proof</h3>
-            <div className="max-h-80 overflow-auto border rounded-xl p-1 bg-slate-900">
-              <img src={previewProofUrl} alt="Receipt Proof" className="w-full h-auto rounded-lg object-contain" />
-            </div>
-          </div>
-        </div>
-      )}
+      <ProofPreviewModal
+        data={previewProof}
+        onClose={() => setPreviewProof(null)}
+      />
 
       {/* Official Transaction Receipt Modal */}
       {selectedReceiptTxn && (

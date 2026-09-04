@@ -25,20 +25,17 @@ import {
   copyToClipboardSafe
 } from '../utils/whatsappHelper';
 import { WhatsAppNoticeModal } from './WhatsAppNoticeModal';
+import { ProofPreviewModal, ProofModalData } from './ProofPreviewModal';
 
 interface DepositRequestViewProps {
   onBack: () => void;
   onOpenNotifications: () => void;
 }
 
-const compressImage = (dataUrl: string, maxWidth = 500, quality = 0.5): Promise<string> => {
+const compressImage = (dataUrl: string, maxWidth = 900, quality = 0.65): Promise<string> => {
   return new Promise((resolve) => {
     if (!dataUrl || !dataUrl.startsWith('data:image')) {
-      if (dataUrl && dataUrl.length > 250000) {
-        resolve(dataUrl.substring(0, 250000));
-      } else {
-        resolve(dataUrl || '');
-      }
+      resolve(dataUrl || '');
       return;
     }
     const img = new Image();
@@ -76,6 +73,7 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
   const [comment, setComment] = useState('');
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [inspectProof, setInspectProof] = useState<ProofModalData | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -107,10 +105,17 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setErrorMsg('File size must be under 10MB.');
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+      if (isPdf && file.size > 850 * 1024) {
+        setErrorMsg('PDF file size is over 850KB. Please upload a compressed PDF or take a screenshot of the receipt.');
         return;
       }
+      if (!isPdf && file.size > 15 * 1024 * 1024) {
+        setErrorMsg('Image file size must be under 15MB.');
+        return;
+      }
+
       setErrorMsg(null);
       setFileName(file.name);
       setIsCompressing(true);
@@ -119,10 +124,14 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
       reader.onloadend = async () => {
         const rawResult = reader.result as string;
         try {
-          const compressed = await compressImage(rawResult);
-          setFilePreview(compressed);
+          if (isPdf) {
+            setFilePreview(rawResult);
+          } else {
+            const compressed = await compressImage(rawResult);
+            setFilePreview(compressed);
+          }
         } catch {
-          setFilePreview(rawResult.length > 250000 ? rawResult.substring(0, 250000) : rawResult);
+          setFilePreview(rawResult);
         } finally {
           setIsCompressing(false);
         }
@@ -220,11 +229,14 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
         </div>
         <button
           onClick={onOpenNotifications}
-          className="relative p-2 rounded-full hover:bg-slate-100 transition-colors"
+          className="relative p-2 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+          title={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         >
           <Bell className="w-6 h-6 text-slate-700" />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white" />
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-rose-600 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 border-2 border-white shadow-xs">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
           )}
         </button>
       </div>
@@ -387,20 +399,60 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
               ) : filePreview ? (
                 <div className="relative border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center gap-3">
                   {filePreview.startsWith('data:image') ? (
-                    <img src={filePreview} alt="Receipt Preview" className="w-14 h-14 rounded-lg object-cover border" />
+                    <img
+                      src={filePreview}
+                      alt="Receipt Preview"
+                      className="w-14 h-14 rounded-lg object-cover border border-slate-200 cursor-pointer hover:opacity-90"
+                      onClick={() =>
+                        setInspectProof({
+                          url: filePreview,
+                          name: fileName || 'Receipt.jpg',
+                          amount: parseFloat(amount) || undefined,
+                          method: method || undefined
+                        })
+                      }
+                    />
                   ) : (
-                    <div className="w-14 h-14 rounded-lg bg-blue-100 flex items-center justify-center text-blue-800">
+                    <div
+                      className="w-14 h-14 rounded-lg bg-blue-100 flex items-center justify-center text-blue-800 cursor-pointer hover:bg-blue-200 transition-colors"
+                      onClick={() =>
+                        setInspectProof({
+                          url: filePreview,
+                          name: fileName || 'Document.pdf',
+                          amount: parseFloat(amount) || undefined,
+                          method: method || undefined
+                        })
+                      }
+                    >
                       <FileText className="w-6 h-6" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-800 truncate">{fileName}</p>
-                    <p className="text-[10px] text-emerald-600 font-semibold">Ready to upload</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setInspectProof({
+                            url: filePreview,
+                            name: fileName || (filePreview.includes('pdf') ? 'Receipt.pdf' : 'Receipt.jpg'),
+                            amount: parseFloat(amount) || undefined,
+                            method: method || undefined
+                          })
+                        }
+                        className="text-[11px] text-blue-700 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <span>Click to Preview</span>
+                      </button>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-[10px] text-emerald-600 font-semibold">Ready</span>
+                    </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => { setFilePreview(null); setFileName(null); }}
-                    className="p-1 rounded-full hover:bg-slate-200 text-slate-500"
+                    className="p-1 rounded-full hover:bg-slate-200 text-slate-500 cursor-pointer"
+                    title="Remove attachment"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -449,6 +501,12 @@ export const DepositRequestView: React.FC<DepositRequestViewProps> = ({ onBack, 
           </form>
         </div>
       </div>
+
+      {/* Proof Preview Modal */}
+      <ProofPreviewModal
+        data={inspectProof}
+        onClose={() => setInspectProof(null)}
+      />
 
       {/* WhatsApp Notice Modal */}
       <WhatsAppNoticeModal

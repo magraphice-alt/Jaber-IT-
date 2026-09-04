@@ -7,13 +7,12 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 
-// Use initializeFirestore with auto detect long polling for resilient connections in iframe / cloud sandboxes
+// Use initializeFirestore with force long polling for resilient connections in iframe / cloud sandboxes
 export const db = (() => {
   const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
   try {
     return initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
-      experimentalForceLongPolling: false
+      experimentalForceLongPolling: true
     }, dbId);
   } catch {
     // If already initialized or fallback

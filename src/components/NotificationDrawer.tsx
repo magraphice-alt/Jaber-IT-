@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText, RotateCcw, Lock } from 'lucide-react';
+import { Bell, X, CheckCircle2, AlertTriangle, Info, Trash2, FileText, RotateCcw, Lock, CheckCheck } from 'lucide-react';
 import { ReceiptModal } from './ReceiptModal';
 import { Transaction } from '../types';
 
@@ -10,7 +10,16 @@ interface NotificationDrawerProps {
 }
 
 export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, onClose }) => {
-  const { notifications, transactions, currentUser, markNotificationRead, deleteNotification, clearNotifications, startResendTransaction } = useApp();
+  const {
+    notifications,
+    transactions,
+    currentUser,
+    markNotificationRead,
+    markAllNotificationsRead,
+    deleteNotification,
+    clearNotifications,
+    startResendTransaction
+  } = useApp();
   const [activeReceiptTxn, setActiveReceiptTxn] = useState<Transaction | null>(null);
 
   if (!isOpen) return null;
@@ -20,35 +29,72 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({ isOpen, 
     n => n.userId === currentUser?.id || n.userId === 'all' || (currentUser?.role === 'admin' && n.userId === 'admin')
   );
 
+  const unreadCount = userNotifs.filter(n => !n.read).length;
+
   const handleClearAll = () => {
     clearNotifications();
   };
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs animate-fade-in">
+      <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-fade-in">
         <div className="w-full max-w-sm bg-white h-full shadow-2xl flex flex-col">
           {/* Header */}
-          <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bell className="w-5 h-5 text-blue-400" />
-              <h3 className="font-bold text-base">Notifications</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              {userNotifs.length > 0 && (
+          <div className="p-4 bg-slate-900 text-white flex flex-col gap-2 border-b border-slate-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Bell className="w-5 h-5 text-blue-400" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-slate-900" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-base leading-tight">Notifications</h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">Live Firestore Synced</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllNotificationsRead}
+                    title="Mark all as read"
+                    className="text-xs text-blue-200 hover:text-white flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="text-[11px] font-semibold">Read All</span>
+                  </button>
+                )}
+                {userNotifs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    className="text-xs text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border border-slate-700 transition-colors cursor-pointer active:scale-95"
+                    title="Clear notifications"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="text-[11px] font-semibold">Clear</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleClearAll}
-                  className="text-xs text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 hover:bg-slate-700 px-2.5 py-1.5 rounded-lg border border-slate-700 transition-colors cursor-pointer active:scale-95"
+                  onClick={onClose}
+                  className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded-full cursor-pointer ml-1"
                 >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Clear</span>
+                  <X className="w-5 h-5" />
                 </button>
-              )}
-              <button onClick={onClose} className="p-1 hover:bg-slate-800 rounded-full cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+              </div>
             </div>
+            {unreadCount > 0 && (
+              <div className="text-[11px] text-blue-300 bg-blue-950/80 border border-blue-800/60 rounded-md px-2.5 py-1 flex items-center justify-between">
+                <span>{unreadCount} unread notification{unreadCount > 1 ? 's' : ''}</span>
+                <span className="text-[10px] text-blue-200/80">Tap to mark as read</span>
+              </div>
+            )}
           </div>
 
           {/* List */}
