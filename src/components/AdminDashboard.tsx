@@ -396,7 +396,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
     );
 
     if (res.success) {
-      setCreateSuccessMsg(`User account for ${newUserName} created successfully.`);
+      setCreateSuccessMsg(res.message || `User account for ${newUserName} created successfully. User ID: ${newUserEmail.trim().toLowerCase()} is active and prepared for instant login.`);
       setNewUserName('');
       setNewUserEmail('');
       setNewUserMobile('');
@@ -2695,7 +2695,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address / User ID *
+                </label>
                 <input
                   type="email"
                   value={newUserEmail}
@@ -2704,6 +2706,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                   required
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white"
                 />
+                <p className="text-[10px] text-blue-900 mt-0.5 font-medium">User's email will directly serve as their User ID.</p>
               </div>
 
               <div>
@@ -2729,7 +2732,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Login Password *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Login Password (Auto Active) *
+                </label>
                 <input
                   type="text"
                   value={newUserPassword}
@@ -2738,6 +2743,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onOpenNotificati
                   required
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-900 focus:bg-white font-mono"
                 />
+                <p className="text-[10px] text-emerald-700 mt-0.5 font-medium">Auto-activated immediately so the user can log in right away.</p>
               </div>
 
               <div className="flex gap-2 pt-2">
